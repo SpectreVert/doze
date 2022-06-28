@@ -6,16 +6,18 @@
  * see LICENSE
 */
 
-#ifndef _OG_BUILD_H
-#define _OG_BUILD_H
+#ifndef OG_BUILD_H_
+#define OG_BUILD_H_
 
-#define CROP_COMMANDS     1
+// CONFIGURATION
 
 #define MAX_BUILD_NODES   2048
 #define MAX_BATCH_SIZE    2048
-#define READ_BUFFER_SIZE  1024
+#define READ_BUFFER_SIZE  2048
 
 //----------------------------
+
+#define OG_BUILD_VERSION "0.1.0"
 
 #include <assert.h>
 #include <stdarg.h>
@@ -27,17 +29,14 @@
 
 #include <openssl/md5.h>
 
-#define BU_ASSERT_PERR(s, err) if (!(s)) bu_perror_abort(err);
-#define BU_ASSERT_MSG(s, err) if (!(s)) bu_printf_abort(err);
-
 typedef int8_t   s8;  // char
 typedef int16_t  s16;
 typedef int32_t  s32; // int
 typedef int64_t  s64; // ssize_t
 typedef uint8_t  u8;
 typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint64_t u64; // size_t
+typedef uint32_t u32; // size_t
+typedef uint64_t u64;
 
 typedef struct {
     u32 nb_files;
@@ -86,12 +85,15 @@ typedef struct {
     u32 nb_nodes;
     Build_Node *nodes[MAX_BUILD_NODES];
     Compiler_Options *opts;
-} Context;
+} Build_Context;
+
+#define BU_ASSERT_PERR(s, err) if (!(s)) bu_perror_abort(err);
+#define BU_ASSERT_MSG(s, err) if (!(s)) bu_printf_abort(err);
 
 // ---------------------------------------------------------------
 // Prototypes
-static u8 batch_compile(Context *ctx, Build_Node *node, u8 force);
-static u8 binary_link(Context *ctx, Build_Node *node, u8 updated);
+static u8 batch_compile(Build_Context *ctx, Build_Node *node, u8 force);
+static u8 binary_link(Build_Context *ctx, Build_Node *node, u8 updated);
 
 // ---------------------------------------------------------------
 // Utils
@@ -160,7 +162,7 @@ static void get_file_hash(const char *path, u8 *digest_buf)
 
 static inline u8 is_file_header(const char *path)
 {
-    // We assume that `path` has been verified to end with an extension,
+    // We assume that `path` has been verified to end with an extension
     // and that it is a valid pointer.
     return path[strlen(path) - 1] == 'h';
 }
@@ -181,10 +183,10 @@ static inline char *merge(char *dest, char const *src, char const *sep)
 {
     u64 destlen = strlen(dest);
     u64 srclen, seplen = 0;
-    // We merge `src` into `dest` using optional separator `sep` ; reallocating
-    // if we need to.
 
-    BU_ASSERT_MSG(src, "please provide a valid (char*): src"); 
+    // We merge `src` into `dest` using optional separator `sep`;
+    // reallocating if we need to.
+    BU_ASSERT_MSG(src, "provide a valid (char*): src"); 
     srclen = strlen(src);
     if (sep)
         seplen = strlen(sep);
@@ -245,31 +247,31 @@ static char *batch_objects_merge(Batch *batch, Compiler_Options *opts, u32 *nb_o
 }
 
 // ---------------------------------------------------------------
-// Context
-static Context *make_context(Compiler_Options *opts)
+// Build_Context
+static Build_Context *make_context(Compiler_Options *opts)
 {
-    Context *ctx = bu_zalloc(1, sizeof(Context));
+    Build_Context *ctx = bu_zalloc(1, sizeof(Build_Context));
 
     if (opts)
         ctx->opts = opts;
     return ctx;
 }
 
-static Context *set_options(Context *ctx, Compiler_Options *opts)
+static Build_Context *set_options(Build_Context *ctx, Compiler_Options *opts)
 {
-    BU_ASSERT_MSG(opts, "please provide a non-null (Compiler_Options*): opts");
+    BU_ASSERT_MSG(opts, "provide a non-null (Compiler_Options*): opts");
     ctx->opts = opts;
     return ctx;
 }
 
 // ---------------------------------------------------------------
 // Compiler_Options
-// @Todo We would need to perform some checks in here, such as if OPT_BUILD_PATH
-// and OPT_SRC_PATH end with '/'
+// @Incomplete We would need to perform some checks in here to make it better;
+// i.e, if OPT_BUILD_PATH && OPT_SRC_PATH end with '/'
 static void bake_options(Compiler_Options *opts, u32 nb_options, ...)
 {
-    BU_ASSERT_MSG(opts, "please provide a non-null (Compiler_Options*): opts");
-    BU_ASSERT_MSG(nb_options > 0, "please provide a non-zero (u32): nb_options");
+    BU_ASSERT_MSG(opts, "provide a non-null (Compiler_Options*): opts");
+    BU_ASSERT_MSG(nb_options > 0, "provide a non-zero (u32): nb_options");
     memset(opts, 0, sizeof(Compiler_Options));
 
     u32  type;
@@ -301,7 +303,7 @@ static void bake_options(Compiler_Options *opts, u32 nb_options, ...)
             opts->options[type] = process_opt_string(str, 0x0);
             break;
         default:
-            BU_ASSERT_MSG(type <= OPT_END, "please provide suitable values to bake_options()");
+            BU_ASSERT_MSG(type <= OPT_END, "provide suitable values to bake_options()");
         }
     }
     va_end(list_opts);
@@ -309,7 +311,7 @@ static void bake_options(Compiler_Options *opts, u32 nb_options, ...)
 
 // ---------------------------------------------------------------
 // Build_Node
-static Build_Node *make_node(Context *ctx, u16 type, void *data)
+static Build_Node *make_node(Build_Context *ctx, u16 type, void *data)
 {
     BU_ASSERT_MSG(ctx->nb_nodes < MAX_BUILD_NODES,
                   "MAX_BUILD_NODES limit reached: too many nodes");
@@ -325,12 +327,12 @@ static Build_Node *make_node(Context *ctx, u16 type, void *data)
     return node;
 }
 
-static void node_add_dependency(Context *ctx, u32 self_id, u32 dep_id)
+static void node_add_dependency(Build_Context *ctx, u32 self_id, u32 dep_id)
 {
     // @NoCheckin If adding same dependency twice
     // @NoCheckin Also not checking for cirular dependency
     Build_Node *node = ctx->nodes[self_id];
-    BU_ASSERT_MSG(node, "please provide a valid node id (u32): self_id");
+    BU_ASSERT_MSG(node, "provide a valid node id (u32): self_id");
     BU_ASSERT_MSG(node->nb_dep_ids < MAX_BUILD_NODES,
                   "MAX_BUILD_NODES limit reached: too many dependencies");
     
@@ -338,7 +340,7 @@ static void node_add_dependency(Context *ctx, u32 self_id, u32 dep_id)
     node->nb_dep_ids += 1;
 }
 
-static u8 node_compile(Context *ctx, u32 self_id, u64 const current_stamp)
+static u8 node_compile(Build_Context *ctx, u32 self_id, u64 const current_stamp)
 {
     Build_Node *node = ctx->nodes[self_id];
     u8 updated = 0;
@@ -375,7 +377,7 @@ static u8 node_compile(Context *ctx, u32 self_id, u64 const current_stamp)
 
 // ---------------------------------------------------------------
 // Batch
-static Build_Node *make_batch(Context *ctx, char *files[])
+static Build_Node *make_batch(Build_Context *ctx, char *files[])
 {
     Batch *batch = bu_zalloc(1, sizeof(Batch));
     Compiler_Options *opts = ctx->opts;
@@ -383,7 +385,7 @@ static Build_Node *make_batch(Context *ctx, char *files[])
     batch->nb_files = 0;
     for (u32 i = 0; i < MAX_BATCH_SIZE && files[i]; i++) {
         char *path = bu_zalloc(1, 1);
-        BU_ASSERT_MSG(is_file_correct(files[i]), "please provide accessible c source code files or headers");
+        BU_ASSERT_MSG(is_file_correct(files[i]), "provide accessible c source code files or headers");
         if (opts->options[OPT_SRC_PATH])
             path = merge(path, opts->options[OPT_SRC_PATH][0], 0x0);
         path = merge(path, files[i], 0x0);
@@ -394,7 +396,7 @@ static Build_Node *make_batch(Context *ctx, char *files[])
     return make_node(ctx, ND_BATCH, (void*)batch);
 }
 
-static u8 batch_compile(Context *ctx, Build_Node *node, u8 force)
+static u8 batch_compile(Build_Context *ctx, Build_Node *node, u8 force)
 {
     Batch *batch = (Batch*)node->data;
     u8 buf[MD5_DIGEST_LENGTH];
@@ -432,7 +434,7 @@ static u8 batch_compile(Context *ctx, Build_Node *node, u8 force)
 
 // ---------------------------------------------------------------
 // Binary
-static Build_Node *make_binary(Context *ctx, char const *name)
+static Build_Node *make_binary(Build_Context *ctx, char const *name)
 {
     Binary *binary = bu_zalloc(1, sizeof(Binary));
     Compiler_Options *opts = ctx->opts;
@@ -445,7 +447,7 @@ static Build_Node *make_binary(Context *ctx, char const *name)
     return make_node(ctx, ND_BINARY, (void*)binary);
 }
 
-static u8 binary_link(Context *ctx, Build_Node *node, u8 updated)
+static u8 binary_link(Build_Context *ctx, Build_Node *node, u8 updated)
 {
     Binary *binary = (Binary*)node->data;
     Compiler_Options *opts = ctx->opts;
@@ -453,7 +455,7 @@ static u8 binary_link(Context *ctx, Build_Node *node, u8 updated)
     char *buf;
     u32 nb_object_files = 0;
 
-    // If no dependencies were updated then there's no need to do anything.
+    // If no dependencies were updated then return.
     if (!updated) {
         printf("bin  [%d]: Nothing to do.\n", node->id);
         free(cmd);
@@ -497,4 +499,4 @@ static u8 binary_link(Context *ctx, Build_Node *node, u8 updated)
     return 1;
 }
 
-#endif /* _OG_BUILD_H */
+#endif /* OG_BUILD_H_ */

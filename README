@@ -24,5 +24,6 @@ Consult `demo.c` to have an overview of the available commands.
 Todo
 ----
 
+* finish some features (circular dep checking...)
 * upgrade README (rules of thumb, documentation of the main functions...)
 * add Library to be able to compile and depend on libraries.

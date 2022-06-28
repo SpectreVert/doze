@@ -12,7 +12,7 @@ char *header_files[] = {
 };
 
 int main(int ac, char *av[]) {
-    Context *ctx = make_context(0x0);
+    Build_Context *ctx = make_context(0x0);
     Compiler_Options opts;
     
     bake_options(&opts, 3,
