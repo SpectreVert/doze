@@ -123,6 +123,7 @@ struct Doze_Context {
 
     char *object_files;
     u32 nb_compiled_files;
+    u32 nb_modified_files;
 
     u32 nb_seen;
     u32 seen_cache[DOZE_BATCH_CAP];
@@ -304,8 +305,6 @@ void doze___compile_file(struct Doze_Context *ctx, char const *fpath, u8 for_rea
         return;
     }
 
-    ctx->nb_compiled_files += 1;
-
     // now we construct the compile command
     //
     // cmd = <compiler> -c <source_file> -o <object_file> [options...]
@@ -335,6 +334,8 @@ void doze___compile_file(struct Doze_Context *ctx, char const *fpath, u8 for_rea
     puts(cmd);
     system(cmd);
 
+    ctx->nb_compiled_files += 1;
+
     ZEE_FREE(obj);
     ZEE_FREE(cmd);
 }
@@ -344,31 +345,22 @@ void doze___process_batch(struct Doze_Context *ctx, u32 id)
     ZEE_ASSERT(id < ctx->nb_batches);
 
     struct Doze_Batch *batch = ctx->bucket + id;
-    u8 force = 0;
 
-    // first we see if any parent batch has been updated
+    // first we figure out if any parent batch has been updated
     for (u32 p = 0; p < batch->nb_childs; p++) {
         if (ctx->bucket[p].is_flagged) {
-            force = 1;
+            batch->is_flagged = 1;
             break;
         }
     }
 
-    // then we check every file and recompile if:
-    //  1. a parent batch has been updated
-    //  2. the file has been modified later than the executable
-    //  3. the file is actually compilable (not a header)
-    //
     for (u32 f = 0; f < batch->nb_files; f++) {
-        if (batch->files[f].last_modified > ctx->exe.last_modified || force) {
-            if (!batch->files[f].is_header) {
-                doze___compile_file(ctx, batch->files[f].path, 1);
-            }
-
+        if (batch->files[f].last_modified > ctx->exe.last_modified) {
+            ctx->nb_modified_files += 1;
             batch->is_flagged = 1;
-        } else if (!batch->files[f].is_header) {
-            // even if the file did not get compiled we need its object file
-            doze___compile_file(ctx, batch->files[f].path, 0);
+        }
+        if (!batch->files[f].is_header) {
+            doze___compile_file(ctx, batch->files[f].path, batch->is_flagged);
         }
     }
 }
@@ -501,7 +493,7 @@ void exe(struct Doze_Context *ctx, char const *name)
     }
 
     // if no files changed then no need to recompile
-    if (!ctx->nb_compiled_files) {
+    if (!ctx->nb_modified_files) {
         puts("doze: nothing to do");
         return;
     }
@@ -535,9 +527,17 @@ void exe(struct Doze_Context *ctx, char const *name)
     puts(cmd);
     system(cmd);
 
-    printf("doze: compiled %d file%s\n",
-        ctx->nb_compiled_files,
-        ctx->nb_compiled_files > 1 ? "s" : "");
+    if (ctx->nb_compiled_files) {
+        printf("doze: %d file%s compiled\n",
+            ctx->nb_compiled_files,
+            ctx->nb_compiled_files > 1 ? "s" : "");
+    }
+    if (ctx->nb_compiled_files != ctx->nb_modified_files) {
+        printf("doze: %d file%s modified\n",
+            ctx->nb_modified_files,
+            ctx->nb_modified_files > 1 ? "s" : "");
+    }
+    printf("doze: linked executable '%s'\n", ctx->exe.path);
 
     ZEE_FREE(cmd);
 }
