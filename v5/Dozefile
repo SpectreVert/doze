@@ -1,0 +1,7 @@
+cc:
+  ykz.hpp ykz.cc > ykz.o
+  driver.hpp driver.cc > driver.o
+  utils.hpp utils.cc > utils.o
+
+ld:
+  ykz.o driver.o utils.o > ykz

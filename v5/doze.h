@@ -11,8 +11,6 @@
 
 #include <stdint.h>
 
-#define DOZE_VERSION "0.1.0"
-
 typedef int8_t   s8; 
 typedef int16_t  s16; 
 typedef int32_t  s32; 
