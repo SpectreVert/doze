@@ -7,12 +7,12 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "VERSION.H" 
+#include "doze.h"
 
 static void usage(void);
 static void version(void);
 
-static s32 init(s32,char**);
+static s32 list(s32,char**);
 static s32 stop(s32,char**);
 static s32 update(s32,char**);
 static s32 help(s32,char**);
@@ -27,14 +27,14 @@ main(
 
     if (ac == 0) {
         return update(ac, av);
+    } else if (!strcmp(*av, "list") || !strcmp(*av, "li")) {
+        return list(ac, av);
+    } else if (!strcmp(*av, "stop") || !strcmp(*av, "st")) {
+        return stop(ac, av);
+    } else if (!strcmp(*av, "help") || !strcmp(*av, "?")) {
+        return help(--ac, ++av);
     } else {
-        if (!strcmp(*av, "init") || !strcmp(*av, "in")) {
-            return init(ac, av);
-        } else if (!strcmp(*av, "stop") || !strcmp(*av, "st")) {
-            return stop(ac, av);
-        } else if (!strcmp(*av, "help") || !strcmp(*av, "?")) {
-            return help(--ac, ++av);
-        }
+        return update(ac, av);
     }
 
     usage();
@@ -42,26 +42,14 @@ main(
 }
 
 static s32
-init(
+list(
     s32 ac,
     char **av
 ) {
-    if (ac == 1) {
+    if (ac > 1) {
         (void)help(ac, av);
         return 1;
     }
-
-    /* look for the monitor */
-
-    /* start the monitor if not found */
-
-    /* get the list of files the monitor has found in the tree */
-
-    /* create .doze/ and the DB if they are not here */
-
-    /* parse Dozefile */
-
-    /* store stuff in the DB (...) */
 
     return 0;
 }
@@ -71,11 +59,12 @@ stop(
     s32 ac,
     char **av
 ) {
-    if (ac == 1) {
-        (void)help(ac, av);
-        return 1;
+    if (ac == 0) {
+        /* targeting the local Dozefile */
+        return 0;
     }
 
+    /* targeting a list of other Dozefiles */
     return 0;
 }
 
@@ -84,6 +73,12 @@ update(
     s32 ac,
     char **av
 ) {
+    if (ac == 0) {
+        /* targeting the local Dozefile */
+        return 0;
+    }
+
+    /* targeting a list of other Dozefiles */
     return 0;
 }
 
@@ -93,24 +88,15 @@ help(
     char **av
 ) {
     if (ac == 0) { usage(); return 0; }
-    if (!strcmp(*av, "init") || !strcmp(*av, "in")) {
-        printf("Usage: doze %s <DIRECTORY>\n", *av);
+    if (!strcmp(*av, "list") || !strcmp(*av, "li")) {
+        printf("Usage: doze %s\n", *av);
         printf("\n");
-        printf("Description:\n");
-        printf("  Initialize a watch on the given directory. All files\n");
-        printf("  recursively found inside it are monitored for changes.\n");
-        printf("\n");
-        printf("  A valid Dozefile must be present at the root of the\n");
-        printf("  given directory.\n");
+        printf("Write me\n");
         printf("\n");
     } else if (!strcmp(*av, "stop") || !strcmp(*av, "st")) {
-        printf("Usage: doze %s <DIRECTORY>\n", *av);
+        printf("Usage: doze %s [DIRECTORIES...]\n", *av);
         printf("\n");
-        printf("Description:\n");
-        printf("  Stop watching for changes in the given directory.\n");
-        printf("\n");
-        printf("  The directory must have been previously registered\n");
-        printf("  for watching with a `doze init` call.\n");
+        printf("Write me\n");
         printf("\n");
     }
 
@@ -120,17 +106,16 @@ help(
 static void
 usage(void) {
     version();
-    printf("Usage: doze [COMMAND]\n");
+    printf("Usage:\n");
+    printf("    doze [DIRECTORIES...]\n");
+    printf("    doze [COMMAND]\n");
     printf("\n");
     printf("Commands:\n");
     printf("  help, ?     Print doze help.\n");
     printf("\n");
-    printf("  init, in    Register a directory for monitoring.\n");
-    printf("  stop, st    Stop monitoring a directory.\n");
+    printf("  list, li    Show a list of all monitored Dozefiles.\n");
+    printf("  stop, st    Stop monitoring a Dozefile.\n");
     printf("\n");
-    printf("If no command is used, doze executes the required\n");
-    printf("orders with the files changed since the last run\n");
-    printf("as specified in the current directory Dozefile.\n");
     printf("\n");
     printf("Type 'doze help <COMMAND>' for command-specific help.\n");
 }
