@@ -8,6 +8,8 @@ import (
 	"github.com/spectrevert/doze/internal"
 )
 
+var LinkerVersion = "unknown"
+
 type Opts struct {
 	ArtifactsTag  []string `arg:"-a,--artifact" help:"artifacts to bring up to date"`
 	NamedRulesTag []string `arg:"-r,--rule" help:"named rules to execute"`

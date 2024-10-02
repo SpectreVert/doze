@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spectrevert/doze/pkg/doze"
+	"github.com/spectrevert/doze"
 )
 
 func main() {
