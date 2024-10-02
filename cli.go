@@ -75,7 +75,7 @@ func (cmd UpdateArtifactsCmd) Run() error {
 	fmt.Println(cmd.TargetArtifacts)
 	fmt.Println(cmd.TargetNamedRules)
 
-	var df Dozefile
+	df := NewDozefile()
 	ins1 := []string{"parse.o", "main.o"}
 	outs1 := []string{"ykz"}
 
