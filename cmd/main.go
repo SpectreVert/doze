@@ -5,11 +5,14 @@ import (
 	"os"
 
 	"github.com/spectrevert/doze"
+
+	// Load modules below
+	_ "github.com/spectrevert/doze/procedures/myproc"
 )
 
 func main() {
 	if err := doze.Run(os.Args[1:]); err != nil {
-		fmt.Println("error:", err)
+		fmt.Println("doze:", err)
 		os.Exit(1)
 	}
 }

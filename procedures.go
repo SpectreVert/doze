@@ -3,6 +3,7 @@ package doze
 import (
 	"fmt"
 	"strings"
+	"sort"
 	"sync"
 )
 
@@ -59,11 +60,39 @@ func RegisterProcedure(instance Procedure) {
 	procedures[string(proc.ID)] = proc
 }
 
+func GetProcedures(scope string) []ProcedureInfo {
+	procsMutex.Lock();
+	defer procsMutex.Unlock()
+
+	var procs []ProcedureInfo
+	for _, proc := range procedures {
+		procs = append(procs, proc)
+	}
+
+	// make return value deterministic
+	sort.Slice(procs, func(a, b int) bool {
+		return procs[a].ID < procs[b].ID
+	})
+
+	return procs
+}
+
+func GetProcedure(name string) (ProcedureInfo, error) {
+	procsMutex.Lock()
+	defer procsMutex.Unlock()
+
+	p, ok := procedures[name]
+	if !ok {
+		return ProcedureInfo{}, fmt.Errorf("procedure not registered: %s", name)
+	}
+	return p, nil
+}
+
 const (
-	namespaceSeparator = ':'
+	namespaceSeparator = ":"
 )
 
 var (
 	procedures = make(map[string]ProcedureInfo)
-	procsMutex = sync.RWMutex
+	procsMutex sync.RWMutex
 )
