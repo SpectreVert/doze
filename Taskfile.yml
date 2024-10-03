@@ -1,0 +1,21 @@
+version: "3"
+
+vars:
+  #
+  # As of Go 1.23, we still need to use the linker to embed version information.
+  # See https://github.com/golang/go/issues/50603
+  VERSION: { sh: git describe --long --dirty --always --tags }
+  LDFLAGS: -X github.com/spectrevert/doze.LinkerVersion={{.VERSION}}
+
+
+tasks:
+  build:
+    desc: Build the executable
+    dir: bin
+    cmds:
+      - go build -o doze -ldflags "{{.LDFLAGS}}" ../cmd
+
+  clean:
+    desc: Delete build artifacts
+    cmds:
+      - rm -rf bin
