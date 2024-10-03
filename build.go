@@ -38,7 +38,7 @@ type Artifact struct {
 func NewDozefile() Dozefile {
 	return Dozefile{
 		runtimeArtifacts: make(map[string]Artifact),
-		namedRules: make(map[string][]Rule),
+		namedRules:       make(map[string][]Rule),
 	}
 }
 
@@ -62,8 +62,8 @@ func (df *Dozefile) createRule(inputTags []string, outputTags []string, procedur
 		if !ok {
 			// no reference for outputTag, create and store it
 			df.runtimeArtifacts[outputTag] = Artifact{
-				tag: outputTag,
-				isTerminal: true,
+				tag:         outputTag,
+				isTerminal:  true,
 				creatorRule: &newRule,
 			}
 			outputArtifact, _ = df.runtimeArtifacts[outputTag]
@@ -80,10 +80,10 @@ func (df *Dozefile) createRule(inputTags []string, outputTags []string, procedur
 		if !ok {
 			// no reference to inputTag, create and store it
 			df.runtimeArtifacts[inputTag] = Artifact{
-				tag: inputTag,
+				tag:        inputTag,
 				isTerminal: false,
 			}
-		} else if (inputArtifact.isTerminal) {
+		} else if inputArtifact.isTerminal {
 			// if the artifact existed before then it's not a terminal output anymore
 			inputArtifact.isTerminal = false
 			df.runtimeArtifacts[inputTag] = inputArtifact
@@ -136,9 +136,15 @@ func (df *Dozefile) scheduleR(targetTags []string) ([]Rule, error) {
 		// TODO check if artifact is in remote
 
 		// default path: schedule the artifact's children (outputs) and creatorRule
-		if (artifact.creatorRule == nil) { /* primordial input */ continue }
-		if (artifact.creatorRule.isScheduled) { /* rule already scheduled */ continue }
-		if (artifact.isScheduled) { /* artifact already scheduled */ continue }
+		if artifact.creatorRule == nil { /* primordial input */
+			continue
+		}
+		if artifact.creatorRule.isScheduled { /* rule already scheduled */
+			continue
+		}
+		if artifact.isScheduled { /* artifact already scheduled */
+			continue
+		}
 
 		// add the creatorRule to the plan
 		artifact.creatorRule.isScheduled = true
@@ -148,7 +154,7 @@ func (df *Dozefile) scheduleR(targetTags []string) ([]Rule, error) {
 		// add inputs of the creatorRule to the todoList, as we prepare to go up the dependency tree
 		// (check for duplicates)
 		for _, inputTag := range artifact.creatorRule.inputs {
-			if ! slices.Contains(todoList, inputTag) {
+			if !slices.Contains(todoList, inputTag) {
 				todoList = append(todoList, inputTag)
 			}
 		}
@@ -158,8 +164,12 @@ func (df *Dozefile) scheduleR(targetTags []string) ([]Rule, error) {
 }
 
 func (df *Dozefile) cleanup() {
-	for _, a := range df.runtimeArtifacts { a.isScheduled = false }
-	for _, r := range df.runtimeRules { r.isScheduled = false }
+	for _, a := range df.runtimeArtifacts {
+		a.isScheduled = false
+	}
+	for _, r := range df.runtimeRules {
+		r.isScheduled = false
+	}
 }
 
 func (df *Dozefile) createNamedRule(inputs []string, outputs []string, procedureTag ProcedureID, name string) error {

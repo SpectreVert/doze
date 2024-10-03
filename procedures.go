@@ -2,8 +2,8 @@ package doze
 
 import (
 	"fmt"
-	"strings"
 	"sort"
+	"strings"
 	"sync"
 )
 
@@ -61,7 +61,7 @@ func RegisterProcedure(instance Procedure) {
 }
 
 func GetProcedures(scope string) []ProcedureInfo {
-	procsMutex.Lock();
+	procsMutex.Lock()
 	defer procsMutex.Unlock()
 
 	var procs []ProcedureInfo

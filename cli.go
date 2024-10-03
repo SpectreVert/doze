@@ -11,7 +11,7 @@ import (
 
 var LinkerVersion = "unknown"
 
-type ListProcsCmd struct {}
+type ListProcsCmd struct{}
 type UpdateArtifactsCmd struct {
 	TargetArtifacts  []string
 	TargetNamedRules []string
@@ -23,7 +23,7 @@ type options struct {
 
 	// ** Commands
 	// * Modules
-	ListProcs       *ListProcsCmd        `arg:"subcommand:ls-procs" help:"list the procedures loaded into this doze binary"`
+	ListProcs *ListProcsCmd `arg:"subcommand:ls-procs" help:"list the procedures loaded into this doze binary"`
 }
 
 func (options) Description() string {
@@ -52,7 +52,7 @@ func Run(cmdLine []string) error {
 	default:
 		// this is the default build path
 		return UpdateArtifactsCmd{
-			TargetArtifacts: opts.ArtifactsTag,
+			TargetArtifacts:  opts.ArtifactsTag,
 			TargetNamedRules: opts.NamedRulesTag,
 		}.Run()
 	}
