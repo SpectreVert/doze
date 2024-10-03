@@ -18,8 +18,8 @@ type UpdateArtifactsCmd struct {
 }
 
 type options struct {
-	ArtifactsTag  []string `arg:"-a,--artifact" help:"artifacts to bring up to date"`
-	NamedRulesTag []string `arg:"-r,--rule" help:"named rules to execute"`
+	ArtifactsTag  []string `arg:"-a,--artifact,separate" help:"artifacts to bring up to date"`
+	NamedRulesTag []string `arg:"-r,--rule,separate" help:"named rules to execute"`
 
 	// ** Commands
 	// * Modules
@@ -72,16 +72,48 @@ func (cmd ListProcsCmd) Run() error {
 }
 
 func (cmd UpdateArtifactsCmd) Run() error {
-	fmt.Println(cmd.TargetArtifacts)
-	fmt.Println(cmd.TargetNamedRules)
+	fmt.Println("cmd.TargetArtifacts", cmd.TargetArtifacts)
+	fmt.Println("cmd.TargetNamedRules", cmd.TargetNamedRules)
 
 	df := NewDozefile()
-	ins1 := []string{"parse.o", "main.o"}
-	outs1 := []string{"ykz"}
+	ins0 := []string{"parse.o", "main.o"}
+	outs0 := []string{"ykz"}
 
-	df.createRule(ins1, outs1, "somenamespace:bigzbi")
-	if err := df.createRule(ins1, outs1, "makismusam"); err != nil {
+	ins1 := []string{"parse.h", "parse.c"}
+	outs1 := []string{"parse.o"}
+
+	ins2 := []string{"parse.h", "main.c"}
+	outs2 := []string{"main.o"}
+
+	ins3 := []string{"parse.y"}
+	outs3 := []string{"parse.c", "parse.h"}
+
+	if err := df.createRule(ins1, outs1, "somenamespace:bigzbi"); err != nil {
 		return err
+	}
+	if err := df.createRule(ins0, outs0, "somenamespace:bigzbi"); err != nil {
+		return err
+	}
+	if err := df.createRule(ins2, outs2, "somenamespace:bigzben"); err != nil {
+		return err
+	}
+	if err := df.createRule(ins3, outs3, "somenamespace:bigzben"); err != nil {
+		return err
+	}
+
+	plan, err := df.Rebuild(cmd.TargetArtifacts)
+	if err != nil {
+		return err
+	}
+
+	for _, planned := range plan {
+		fmt.Println(planned.procInfo.ID)
+		for _, inputTag := range planned.inputs {
+			fmt.Println("  ", inputTag)
+		}
+		for _, outputTag := range planned.outputs {
+			fmt.Println("  ", outputTag)
+		}
 	}
 
 	return nil
