@@ -108,9 +108,11 @@ func (cmd UpdateArtifactsCmd) Run() error {
 
 	for _, planned := range plan {
 		fmt.Println(planned.procInfo.ID)
+		fmt.Println(" inputs:")
 		for _, inputTag := range planned.inputs {
 			fmt.Println("  ", inputTag)
 		}
+		fmt.Println(" outputs:")
 		for _, outputTag := range planned.outputs {
 			fmt.Println("  ", outputTag)
 		}

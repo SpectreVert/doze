@@ -115,7 +115,9 @@ func (df *Dozefile) Rebuild(targetTags []string) ([]Rule, error) {
 	// reset status
 	df.cleanup()
 
-	return df.scheduleR(targetTags)
+	plan, err := df.scheduleR(targetTags)
+	slices.Reverse(plan)
+	return plan, err
 }
 
 // the R in scheduleR is for recursive
