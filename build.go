@@ -5,7 +5,13 @@ import (
 	"slices"
 )
 
-// A Dozefile describes how a build should be performed.
+// Describes how a build should be performed.
+//
+// This is basically a DAG of dependencies with
+// artifacts  and rules as nodes and edges, respectively.
+//
+// @todo implement namedRules, which are user-triggerable rules part of the global DAG.
+//
 type Dozefile struct {
 	runtimeRules     []Rule
 	runtimeArtifacts map[string]Artifact
@@ -97,7 +103,14 @@ func (df *Dozefile) createRule(inputTags []string, outputTags []string, procedur
 	return nil
 }
 
-func (df *Dozefile) Rebuild(targetTags []string) ([]Rule, error) {
+func (df *Dozefile) createNamedRule(inputs []string, outputs []string, procedureTag ProcedureID, name string) error {
+	// TODO logic to add a NamedRule (which is like a rule but which needs to be explicitely called by the user)
+
+	return nil
+}
+
+// Return a linear plan for a build generated topologically.
+func (df *Dozefile) MakePlan(targetTags []string) ([]Rule, error) {
 	if targetTags == nil {
 		// by default, schedule all terminal outputs (maybe slow?)
 		for _, artifact := range df.runtimeArtifacts {
@@ -115,13 +128,18 @@ func (df *Dozefile) Rebuild(targetTags []string) ([]Rule, error) {
 	// reset status
 	df.cleanup()
 
-	plan, err := df.scheduleR(targetTags)
+	plan, err := df.topoSchedule(targetTags)
 	slices.Reverse(plan)
 	return plan, err
 }
 
-// the R in scheduleR is for recursive
-func (df *Dozefile) scheduleR(targetTags []string) ([]Rule, error) {
+// Create a topological plan of execution for the rules in runtimeRules,
+// based on the dependencies between the artifacts in runtimeArtifacts.
+//
+// At term this should make use of `constructive traces`,
+// that  is local and remote cache functionalities to speed up
+// compilation times and enable cloud build type setups.
+func (df *Dozefile) topoSchedule(targetTags []string) ([]Rule, error) {
 	if targetTags == nil {
 		return nil, nil
 	}
@@ -133,9 +151,14 @@ func (df *Dozefile) scheduleR(targetTags []string) ([]Rule, error) {
 		if !ok {
 			return nil, fmt.Errorf("target artifact %s does not exist", targetTag)
 		}
+
 		// TODO implement hashing of the artifact / rules / whatnot
-		// TODO check if artifact is in cache
-		// TODO check if artifact is in remote
+
+		// TODO check if artifact is in cloud
+
+		// TODO check if artifact is in local cache
+
+		// TODO record the new value as a constructive trace
 
 		// default path: schedule the artifact's children (outputs) and creatorRule
 		if artifact.creatorRule == nil { /* primordial input */
@@ -161,10 +184,11 @@ func (df *Dozefile) scheduleR(targetTags []string) ([]Rule, error) {
 			}
 		}
 	}
-	morePlan, err := df.scheduleR(todoList)
+	morePlan, err := df.topoSchedule(todoList)
 	return append(plan, morePlan...), err
 }
 
+// Clears the scheduled status, for now only used by topoSchedule.
 func (df *Dozefile) cleanup() {
 	for _, a := range df.runtimeArtifacts {
 		a.isScheduled = false
@@ -172,10 +196,4 @@ func (df *Dozefile) cleanup() {
 	for _, r := range df.runtimeRules {
 		r.isScheduled = false
 	}
-}
-
-func (df *Dozefile) createNamedRule(inputs []string, outputs []string, procedureTag ProcedureID, name string) error {
-	// TODO logic to add a NamedRule (which is like a rule but which needs to be explicitely called)
-
-	return nil
 }

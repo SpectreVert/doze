@@ -58,6 +58,7 @@ func Run(cmdLine []string) error {
 	}
 }
 
+// Outputs the list of procedures loaded into this doze binary.
 func (cmd ListProcsCmd) Run() error {
 	procs := GetProcedures("")
 	if procs == nil {
@@ -71,11 +72,21 @@ func (cmd ListProcsCmd) Run() error {
 	return nil
 }
 
+// Updates the artifacts as per the build configuration.
+//
+// In the future, the build config will be specified in
+// a build file, the Dozefile. I haven't settled yet on
+// a syntax/language to use for the Dozefile so for now
+// we're hardcoding structs :D
+//
+// Takes in the command-line arguments for the command inside the UpdateArtifactsCmd struct.
 func (cmd UpdateArtifactsCmd) Run() error {
 	fmt.Println("cmd.TargetArtifacts", cmd.TargetArtifacts)
 	fmt.Println("cmd.TargetNamedRules", cmd.TargetNamedRules)
 
 	df := NewDozefile()
+
+	// a hardcoded build
 	ins0 := []string{"parse.o", "main.o"}
 	outs0 := []string{"ykz"}
 
@@ -101,11 +112,12 @@ func (cmd UpdateArtifactsCmd) Run() error {
 		return err
 	}
 
-	plan, err := df.Rebuild(cmd.TargetArtifacts)
+	plan, err := df.MakePlan(cmd.TargetArtifacts)
 	if err != nil {
 		return err
 	}
 
+	// Debug output some more...
 	for _, planned := range plan {
 		fmt.Println(planned.procInfo.ID)
 		fmt.Println(" inputs:")

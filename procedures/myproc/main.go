@@ -7,6 +7,13 @@ func init() {
 	doze.RegisterProcedure(Bigzben{})
 }
 
+// Demo procedure module registering two bogus procedures.
+// In the future, the procedures will implement traits for hooking
+// up to the build system! For more info see procedures.go
+// Anyway, this is basically how a procedure is declared in doze.
+// Import the packge in ./cmd/main.go to compile it in and that's it.
+//
+// It's quite cool.
 type Bigzbi struct {}
 type Bigzben struct {}
 

@@ -1,3 +1,29 @@
+// This is heavily inspired from the modules approach of the Caddy webserver.
+// We instead used procedures, which are essentially user-written logic for
+// processing inputs into their outputs. For instance a procedure could start
+// a system thread to compile a C file into an object file.
+// A procedure MUST respect the golden rule, that is: no side effects on files
+// others than the inputs and the outputs. In functional terms, it should be as
+// pure as possible. In some cases that can be hard to prove or downright implement,
+// but essentially all files in the build system MUST be accounted for.
+// (There is a world in which we bypass this rule and verify ourselves
+// that all dependencies have been accounted for, like Tup build system does,
+// but this is not the priority here).
+// So declare properly all inputs and all outputs while writing Rules.
+// The second golden rule is that a sequence `a` of inputs with values [A] must yield
+// the same outputs [B] everytime they get processed. That is, the procedure MUST be
+// deterministic and return for each input combination a predictable output combination.
+// Unless stated otherwise, for example, as a non-deterministic procedure. Again, this
+// is doable but not the priority for now.
+// The third and last golden rule is that a procedure should be as fast as possible.
+// System calls will be possible, provided I make a wrapper around it
+// somehow to do some preparing and cleaning up of the task execution,
+// but should be avoided for Go funcs, C functions are good as well
+// but limit the ability of doze to be compiled easily on all platforms
+// (AFAIU, I might be wrong here.)
+// (If someone could embed compilation of C++ code in a Go library..
+// Would be great for science))
+// Anyway, same here no real documentation, code is mostly self-explanatory.
 package doze
 
 import (
@@ -7,6 +33,10 @@ import (
 	"sync"
 )
 
+// This is the main user-facing interface for doze.
+// Procedures are called during rule execution and transform
+// inputs into outputs.
+// At term we should have interfaces for
 type Procedure interface {
 	DozeProcedure() ProcedureInfo
 }
@@ -88,6 +118,7 @@ func GetProcedure(name string) (ProcedureInfo, error) {
 	return p, nil
 }
 
+// not sure if this separator will stay, "." is easier on the eyes.
 const (
 	namespaceSeparator = ":"
 )

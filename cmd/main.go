@@ -7,7 +7,7 @@ import (
 	"github.com/spectrevert/doze"
 
 	// Load modules below
-	_ "github.com/spectrevert/doze/procedures/myproc" // this one import two test procedures
+	_ "github.com/spectrevert/doze/procedures/myproc" // this one imports two empty procedures-- with real names
 )
 
 func main() {
