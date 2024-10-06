@@ -11,7 +11,6 @@ import (
 // artifacts  and rules as nodes and edges, respectively.
 //
 // @todo implement namedRules, which are user-triggerable rules part of the global DAG.
-//
 type Dozefile struct {
 	runtimeRules     []Rule
 	runtimeArtifacts map[string]Artifact
@@ -72,7 +71,7 @@ func (df *Dozefile) createRule(inputTags []string, outputTags []string, procedur
 				isTerminal:  true,
 				creatorRule: &newRule,
 			}
-			outputArtifact, _ = df.runtimeArtifacts[outputTag]
+			outputArtifact = df.runtimeArtifacts[outputTag]
 		} else if outputArtifact.creatorRule != nil {
 			return fmt.Errorf("artifact %s cannot be output more than once", outputTag)
 		}
@@ -114,7 +113,7 @@ func (df *Dozefile) MakePlan(targetTags []string) ([]Rule, error) {
 	if targetTags == nil {
 		// by default, schedule all terminal outputs (maybe slow?)
 		for _, artifact := range df.runtimeArtifacts {
-			if artifact.isTerminal == true {
+			if artifact.isTerminal {
 				targetTags = append(targetTags, artifact.tag)
 			}
 		}
@@ -190,10 +189,12 @@ func (df *Dozefile) topoSchedule(targetTags []string) ([]Rule, error) {
 
 // Clears the scheduled status, for now only used by topoSchedule.
 func (df *Dozefile) cleanup() {
-	for _, a := range df.runtimeArtifacts {
-		a.isScheduled = false
+	for id, artifact := range df.runtimeArtifacts {
+		artifact.isScheduled = false
+		df.runtimeArtifacts[id] = artifact
 	}
-	for _, r := range df.runtimeRules {
-		r.isScheduled = false
+	for i, rule := range df.runtimeRules {
+		rule.isScheduled = false
+		df.runtimeRules[i] = rule
 	}
 }

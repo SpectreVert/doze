@@ -47,12 +47,21 @@ type ProcedureInfo struct {
 }
 
 // String that uniquely indentifies a Doze procedure in the form:
-// <namespace>:<name>
+// <namespace> <namespaceSeparator> <name>
+// i.e: "test:bubbles" when namespaceSeparator is `:`
 type ProcedureID string
+
+type ProcedureError struct {
+	name string
+}
+
+func (err ProcedureError) Error() string {
+	return fmt.Sprintf("procedure not registered: %s", err.name)
+}
 
 // Return the namespace portion of a procedure id
 func (id ProcedureID) Namespace() string {
-	lastSeparator := strings.LastIndex(string(id), namespaceSeparator)
+	lastSeparator := strings.LastIndex(string(id), namespaceSep)
 	if lastSeparator < 0 {
 		return ""
 	}
@@ -64,7 +73,7 @@ func (id ProcedureID) Name() string {
 	if id == "" {
 		return ""
 	}
-	portions := strings.Split(string(id), namespaceSeparator)
+	portions := strings.Split(string(id), namespaceSep)
 	return portions[len(portions)-1]
 }
 
@@ -94,8 +103,28 @@ func GetProcedures(scope string) []ProcedureInfo {
 	procsMutex.Lock()
 	defer procsMutex.Unlock()
 
+	parts := strings.Split(scope, namespaceSep)
+
+	// the empty scope should match only the top-level procedures
+	if scope == "" {
+		parts = []string{}
+	}
+
 	var procs []ProcedureInfo
-	for _, proc := range procedures {
+iterateProcs:
+	for id, proc := range procedures {
+		procParts := strings.Split(id, namespaceSep)
+
+		// specified parts must be a match
+		for i := range parts {
+			if i > len(procParts)-1 {
+				continue iterateProcs
+			}
+			if parts[i] != procParts[i] {
+				continue iterateProcs
+			}
+		}
+
 		procs = append(procs, proc)
 	}
 
@@ -113,14 +142,14 @@ func GetProcedure(name string) (ProcedureInfo, error) {
 
 	p, ok := procedures[name]
 	if !ok {
-		return ProcedureInfo{}, fmt.Errorf("procedure not registered: %s", name)
+		return ProcedureInfo{}, ProcedureError{name}
 	}
 	return p, nil
 }
 
-// not sure if this separator will stay, "." is easier on the eyes.
+// "." is easier on the eyes, but could be confused for a file extension...
 const (
-	namespaceSeparator = ":"
+	namespaceSep = ":"
 )
 
 var (
