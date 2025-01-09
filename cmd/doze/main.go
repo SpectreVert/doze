@@ -1,12 +1,18 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
-	cmd "github.com/spectrevert/doze/cmd"
+	"github.com/spectrevert/doze"
+
 	// plug in Doze modules under this comment
+	_ "github.com/spectrevert/doze/procedures/myTestProcedures"
 )
 
 func main() {
-	os.Exit(cmd.Main())
+	if err := doze.Run(os.Args[1:]); err != nil {
+		fmt.Println("doze:", err)
+		os.Exit(1)
+	}
 }

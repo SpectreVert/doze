@@ -1,0 +1,11 @@
+version: '3'
+
+vars:
+  VERSION: { sh: git describe --long --dirty --always }
+  LDFLAGS: -X github.com/spectrevert/doze.LinkerVersion={{.VERSION}} 
+
+tasks:
+  build:
+    desc: build doze
+    cmds:
+      - go build -o bin/doze -ldflags="{{.LDFLAGS}}" -v ./cmd/doze
