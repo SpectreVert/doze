@@ -4,25 +4,29 @@ import (
 	"fmt"
 )
 
+// A Rebuilder is given a list of Artifacts to bring up to date and computes a list of Rules to execute
+// or inspect to achieve the wanted goal.
+type Rebuilder interface {
+	rebuild([]ArtifactTag, *Graph) ([]Rule, error)
+}
+
 type DeepRebuilder struct{}
 
-func (dr *DeepRebuilder) rebuild(targets []ArtifactTag, level int, graph *Graph) ([]*Rule, error) {
-	if graph == nil {
+func (dr *DeepRebuilder) rebuild(targets []ArtifactTag, level int, g *Graph) ([]*Rule, error) {
+	if g == nil {
 		return nil, fmt.Errorf("graph is nil")
 	}
 	if targets == nil {
 		return nil, nil
 	}
-
 	var plan []*Rule
-
 	for _, target := range targets {
-		a, ok := graph.artifacts[target]
+		a, ok := g.artifacts[target]
 		if !ok {
 			return nil, fmt.Errorf("target artifact %s does not exist", target)
 		}
 		if a.creatorRule == nil {
-			// a is a primordial input
+			// `a` is a primordial input
 			if level == 0 {
 				// if level == 0, `a` *is* an original target also, which is an error
 				return nil, fmt.Errorf("target artifact %s is a primordial input", target)
@@ -39,7 +43,7 @@ func (dr *DeepRebuilder) rebuild(targets []ArtifactTag, level int, graph *Graph)
 			continue
 		}
 		// we have to check all of the creatorRule's inputs, meaning we are going up one level
-		tmpPlan, err := dr.rebuild(a.creatorRule.inputs, level+1, graph)
+		tmpPlan, err := dr.rebuild(a.creatorRule.inputs, level+1, g)
 		if err != nil {
 			return nil, err
 		} else if tmpPlan == nil {
@@ -53,65 +57,3 @@ func (dr *DeepRebuilder) rebuild(targets []ArtifactTag, level int, graph *Graph)
 	}
 	return plan, nil
 }
-
-/* // The SimpleRebuilder builds a list of Rules required to bring up-to-date the targets without taking
-// any previous runs into account. The resulting list of Rules makes up the partial diagram(s) linking
-// the target(s) their primordial input(s).
-type SimpleRebuilder struct {
-}
-
-func (sr *SimpleRebuilder) rebuild(targets []ArtifactTag, graph *Graph) ([]Rule, error) {
-	if graph == nil {
-		return nil, fmt.Errorf("graph is nil")
-	}
-	if targets == nil {
-		return nil, nil
-	}
-
-	var p []Rule
-	var todoList []ArtifactTag
-	for _, target := range targets {
-		a, ok := graph.artifacts[target]
-		if !ok {
-			return nil, fmt.Errorf("target artifact %s does not exist", target)
-		}
-
-		if a.creatorRule == nil {
-			// Artifact is a primordial input
-			continue
-		}
-		if a.creatorRule.scheduled {
-			continue
-		}
-		if a.scheduled {
-			continue
-		}
-
-		// schedule the Artifact and its creatorRule
-		a.creatorRule.scheduled = true
-		a.scheduled = true
-		p = append(p, *a.creatorRule)
-
-		// add inputs of the creatorRule to the todoList as we prepare to go up the dependency tree
-		// check for duplicates
-		for _, input := range a.creatorRule.inputs {
-			if !slices.Contains(todoList, input) {
-				todoList = append(todoList, input)
-			}
-		}
-	}
-	parent, err := sr.rebuild(todoList, graph)
-	return append(p, parent...), err
-}
-
-func (*SimpleRebuilder) cleanup(graph *Graph) {
-	for tag, a := range graph.artifacts {
-		a.scheduled = false
-		graph.artifacts[tag] = a
-	}
-	for idx, rule := range graph.rules {
-		rule.scheduled = false
-		graph.rules[idx] = rule
-	}
-}
-*/

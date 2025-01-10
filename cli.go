@@ -36,33 +36,6 @@ func Run(args []string) error {
 	// ephemeral graph
 	graph := NewGraph()
 
-	/* 	// a hardcoded build
-	   	ins0 := []ArtifactTag{"parse.o", "main.o"}
-	   	outs0 := []ArtifactTag{"ykz"}
-
-	   	ins1 := []ArtifactTag{"parse.h", "parse.c"}
-	   	outs1 := []ArtifactTag{"parse.o"}
-
-	   	ins2 := []ArtifactTag{"main.c"}
-	   	outs2 := []ArtifactTag{"main.o"}
-
-	   	if err := graph.createRule(ins1, outs1, "lang.c.objectFile"); err != nil {
-	   		return err
-	   	}
-
-	   	if err := graph.createRule(ins2, outs2, "lang.c.objectFile"); err != nil {
-	   		return err
-	   	}
-
-	   	if err := graph.createRule(ins0, outs0, "lang.c.linker"); err != nil {
-	   		return err
-	   	}
-
-	   	// harcoded target Artifacts
-	   	targets := []ArtifactTag{"main.o"} */
-
-	// a hardcoded build
-
 	i0 := []ArtifactTag{"primordial_1", "primordial_2"}
 	o0 := []ArtifactTag{"inter_1", "inter_2"}
 
@@ -72,11 +45,14 @@ func Run(args []string) error {
 	i2 := []ArtifactTag{"inter_1", "inter_2", "inter_3"}
 	o2 := []ArtifactTag{"inter_4", "inter_5"}
 
-	i3 := []ArtifactTag{"inter_3", "inter_4"}
+	i3 := []ArtifactTag{"inter_3", "inter_2"}
 	o3 := []ArtifactTag{"final_1"}
 
 	i4 := []ArtifactTag{"inter_4", "inter_5"}
 	o4 := []ArtifactTag{"final_2"}
+
+	i5 := []ArtifactTag{"primordial_4"}
+	o5 := []ArtifactTag{"final_3"}
 
 	if err := graph.createRule(i0, o0, "lang.c.objectFile"); err != nil {
 		return err
@@ -98,11 +74,15 @@ func Run(args []string) error {
 		return err
 	}
 
+	if err := graph.createRule(i5, o5, "lang.c.objectFile"); err != nil {
+		return err
+	}
+
 	// using SimpleRebuilder to create a build plan
 	dr := new(DeepRebuilder)
 
 	// build targets
-	targets := []ArtifactTag{"final_1", "final_2"}
+	targets := []ArtifactTag{"final_1", "final_2", "final_3"}
 
 	plan, err := dr.rebuild(targets, 0, graph)
 	if err != nil {
