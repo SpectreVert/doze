@@ -1,0 +1,7 @@
+i parse.y
+i main.c
+a parse.c
+a parse.h
+a parse.o
+a main.o
+a exe

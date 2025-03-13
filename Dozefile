@@ -1,0 +1,14 @@
+use lang:c
+
+c:yacc {
+  do parse.y > parse.h parse.c
+}
+
+c:object-file {
+  parse.h parse.c > parse.o
+  parse.h main.c  > main.o
+}
+
+c:executable {
+  parse.o main.o > exe
+}
