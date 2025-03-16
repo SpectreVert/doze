@@ -65,7 +65,10 @@ type Graph struct {
 	artifacts map[string]Artifact
 }
 
-func (g *Graph) createRule(inputs []ArtifactTag, outputs []ArtifactTag /* prod */, ruleLocation string) error {
+// Store a new Rule in the Graph.
+// It creates or updates Artifacts based on the input and output ArtifactTags.
+// The rule is stored in a map in which the key is a hash of all its inputs/outputs Tags.
+func (g *Graph) createRule(inputs []ArtifactTag, outputs []ArtifactTag /* proc */, ruleLocation string) error {
 	if len(inputs) == 0 {
 		return fmt.Errorf("no inputs were provided?!")
 	}
@@ -120,16 +123,16 @@ func (g *Graph) createRule(inputs []ArtifactTag, outputs []ArtifactTag /* prod *
 	return nil
 }
 
-// TODO: make a real setExisting func
+// Set the Existing marker on all Artifacts depending if they are found on disk or not.
 func (g *Graph) setExisting() {
-	for key, artifact := range g.artifacts {
-		realTag := artifact.tag.InternalTag()
-		_, err := os.Stat(realTag)
+	for internalTag, artifact := range g.artifacts {
+		_, err := os.Stat(internalTag)
 		artifact.Exists = (err == nil)
-		g.artifacts[key] = artifact
+		g.artifacts[internalTag] = artifact
 	}
 }
 
+// Reset Touched and Processed markers from the Graph.
 func (g *Graph) reset() {
 	for key, artifact := range g.artifacts {
 		artifact.Touched = false
@@ -138,6 +141,7 @@ func (g *Graph) reset() {
 	}
 }
 
+// Mark touchedArtifacts as having been modified outside of the build system
 func (g *Graph) touchArtifacts(touchedArtifacts []ArtifactTag) {
 	for _, tag := range touchedArtifacts {
 		artifact, ok := g.artifacts[tag.InternalTag()]
@@ -150,8 +154,15 @@ func (g *Graph) touchArtifacts(touchedArtifacts []ArtifactTag) {
 	}
 }
 
-// returns a list of rule hashes from the rules of the graph which should
-// be passed to execute for scheduling.
+// Iterates on the bucket of Rules stored in the Graph.
+// For each Rule, we inspect its input(s) then its output(s). If any input is found to have been
+// modified since the last doze run the Rule is added to a list and the next Rule is immediately
+// inspected.
+// Otherwise its outputs are also checked and if any are missing on disk the Rule is added to the list
+// and the next Rule is immediately inspected.
+// The final list of Rules only contains the hashes from the Rules, which serve as keys in the
+// internal Graph map for the Rules.
+// The order of this list of hashes is deemed non-deterministic.
 func (g *Graph) resolve() []string {
 	var ruleHashes []string
 
@@ -181,43 +192,53 @@ RuleLoop:
 }
 
 func (g *Graph) execute(plan []string) {
+RuleLoop:
 	for _, hash := range plan {
 		rule := g.rules[hash]
 
-		// TODO check the cache for outputs linked to this combination of inputs
+		// check if we can actually run the rule yet
+		// that is, check if all the inputs exist
+		for _, tag := range rule.inputs {
+			artifact := g.artifacts[tag.InternalTag()]
+			if !artifact.Exists {
+				fmt.Println("input doesnt exist yet in", hash)
+				continue RuleLoop
+			}
+		}
 
 		// run the rule
 		fmt.Println("Running rule", hash)
 
-		// mark the inputs as Processed (?)
+		// mark the inputs as Processed
 		for _, tag := range rule.inputs {
 			artifact := g.artifacts[tag.InternalTag()]
 			artifact.Processed = true
 			g.artifacts[tag.InternalTag()] = artifact
 		}
 
-		// mark the outputs as Touched
+		// mark the outputs as Touched and Existing
 		for _, tag := range rule.outputs {
 			artifact := g.artifacts[tag.InternalTag()]
 			artifact.Touched = true
+			artifact.Exists = true
 			g.artifacts[tag.InternalTag()] = artifact
 		}
 
-		rules := g.resolve()
-		if len(rules) > 0 {
-			g.execute(rules)
-		}
+	}
+	rules := g.resolve()
+	if len(rules) > 0 {
+		g.execute(rules)
 	}
 }
 
 func main() {
-	location := path.Clean("./samples/sample-dir.out")
+	location := path.Clean("./samples/sample-dir.in")
 	g := Graph{
 		rules:     make(map[string]Rule),
 		artifacts: make(map[string]Artifact),
 	}
 
-	err := g.createRule([]ArtifactTag{ArtifactTag{"parse.y", ""}}, []ArtifactTag{ArtifactTag{"parse.c", ""}, ArtifactTag{"parse.h", ""}}, location)
+	err := g.createRule([]ArtifactTag{ArtifactTag{"parse.o", ""}, ArtifactTag{"main.o", ""}}, []ArtifactTag{ArtifactTag{"exe", ""}}, location)
 	if err != nil {
 		fmt.Println("create rule:", err)
 		return
@@ -235,7 +256,7 @@ func main() {
 		return
 	}
 
-	err = g.createRule([]ArtifactTag{ArtifactTag{"parse.o", ""}, ArtifactTag{"main.o", ""}}, []ArtifactTag{ArtifactTag{"exe", ""}}, location)
+	err = g.createRule([]ArtifactTag{ArtifactTag{"parse.y", ""}}, []ArtifactTag{ArtifactTag{"parse.c", ""}, ArtifactTag{"parse.h", ""}}, location)
 	if err != nil {
 		fmt.Println("create rule:", err)
 		return
@@ -243,6 +264,8 @@ func main() {
 
 	g.setExisting()
 	g.touchArtifacts([]ArtifactTag{ArtifactTag{"main.c", location}})
+
+	fmt.Println(g.rules)
 
 	rules := g.resolve()
 	g.execute(rules)
