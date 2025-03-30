@@ -8,6 +8,8 @@ import (
 	"path"
 	"slices"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 type ArtifactTag struct {
@@ -231,6 +233,77 @@ RuleLoop:
 	}
 }
 
+func graphFromYAMLDozefile() (*Graph, error) {
+	var data = `
+---
+starters:
+menu:
+  - do: c:yacc
+    inputs: [parse.y]
+    outputs: [parse.h, parse.c]
+
+  - do: c:object-file
+    inputs: [parse.h, parse.c]
+    outputs: [parse.o]
+
+  - do: c:object-file
+    inputs: [parse.h, main.c]
+    outputs: [main.o]
+
+  - do: c:executable
+    inputs: [parse.o, main.o]
+`
+	// yaml schema for doze
+
+	type Starters struct {
+		Use []string `yaml:",flow,omitempty"`
+	}
+
+	type Action struct {
+		Procedure string   `yaml:"do"`
+		Inputs    []string `yaml:",flow"`
+		Outputs   []string `yaml:",flow"`
+	}
+
+	type Schema struct {
+		Starters *Starters
+		Menu     []Action
+	}
+
+	var dozefileYAML Schema
+	err := yaml.Unmarshal([]byte(data), &dozefileYAML)
+	if err != nil {
+		return nil, fmt.Errorf("error unmarshalling data: %v", err)
+	}
+
+	g := &Graph{
+		rules:     make(map[string]Rule),
+		artifacts: make(map[string]Artifact),
+	}
+
+	// transforming the Schema into a Graph
+
+	if dozefileYAML.Starters != nil {
+		// @fixme import procedures
+	}
+
+	if dozefileYAML.Menu == nil {
+		return nil, fmt.Errorf("missing 'menu' statement")
+	}
+
+	// @fixme create prepareTags.
+	// @fixme change createRule format
+	// @fixme add LocalLocation and GlobalLocation
+	for _, action := range dozefileYAML.Menu {
+		err := g.createRule(prepareTags(action.Inputs), prepareTags(action.Outputs), nil, nil)
+		if err != nil {
+			return fmt.Errorf("create rule:", err)
+		}
+	}
+
+	return g, nil
+}
+
 func main() {
 	location := path.Clean("./samples/sample-dir.in")
 	g := Graph{
@@ -269,6 +342,12 @@ func main() {
 
 	rules := g.resolve()
 	g.execute(rules)
+
+	// ----------------------------
+
+	graph, err := graphFromYAMLDozefile()
+
+	fmt.Println(graph)
 }
 
 // 1. Load the Dozefile

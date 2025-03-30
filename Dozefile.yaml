@@ -1,0 +1,22 @@
+---
+starters:
+  use:
+    - lang:c
+    - utils
+
+menu:
+  - do: c:yacc
+    inputs: [parse.y]
+    outputs: [parse.h, parse.c]
+
+  - do: c:object-file
+    inputs: [parse.h, parse.c]
+    outputs: [parse.o]
+
+  - do: c:object-file
+    inputs: [parse.h, main.c]
+    outputs: [main.o]
+
+  - do: c:executable
+    inputs: [parse.o, main.o]
+    outputs: [exe]
