@@ -70,7 +70,7 @@ type Graph struct {
 // Store a new Rule in the Graph.
 // It creates or updates Artifacts based on the input and output ArtifactTags.
 // The rule is stored in a map in which the key is a hash of all its inputs/outputs Tags.
-func (g *Graph) createRule(inputs []ArtifactTag, outputs []ArtifactTag /* proc */, ruleLocation string) error {
+func (g *Graph) createRule(inputs []string, outputs []string /* proc */, baseLocation, scopedLocation string) error {
 	if len(inputs) == 0 {
 		return fmt.Errorf("no inputs were provided?!")
 	}
@@ -78,46 +78,44 @@ func (g *Graph) createRule(inputs []ArtifactTag, outputs []ArtifactTag /* proc *
 		return fmt.Errorf("no outputs were provided?!")
 	}
 
-	r := Rule{
-		inputs:  inputs,
-		outputs: outputs,
+	r := Rule{}
+
+	// duplicate check
+	for _, name := range inputs {
+		tmp := ArtifactTag{name, path.Join(baseLocation, scopedLocation)}
+		_, exists := g.artifacts[tmp.InternalTag()]
+		if !exists {
+			g.artifacts[tmp.InternalTag()] = Artifact{
+				tag: tmp,
+			}
+		}
+		r.inputs = append(r.inputs, tmp)
 	}
+
+	// @nocheckin variable names
+	for _, nameTag := range outputs {
+		tmp := ArtifactTag{nameTag, path.Join(baseLocation, scopedLocation)}
+		artifact, exists := g.artifacts[tmp.InternalTag()]
+		if !exists {
+			g.artifacts[tmp.InternalTag()] = Artifact{
+				tag:     tmp,
+				creator: &r,
+			}
+		} else if artifact.creator != nil {
+			return fmt.Errorf("artifact %s cannot be output two different times", tmp.InternalTag())
+		} else {
+			artifact.creator = &r
+			g.artifacts[tmp.InternalTag()] = artifact
+		}
+		r.outputs = append(r.outputs, tmp)
+	}
+
 	ruleHash := r.Hash()
 
 	// duplicate check
 	_, exists := g.rules[ruleHash]
 	if exists {
 		return fmt.Errorf("rule already declared")
-	}
-
-	// same but for the artifacts
-	for idx, tag := range r.inputs {
-		tag.Location = path.Join(ruleLocation, tag.Location)
-		_, exists := g.artifacts[tag.InternalTag()]
-		if !exists {
-			g.artifacts[tag.InternalTag()] = Artifact{
-				tag: tag,
-			}
-		}
-		r.inputs[idx] = tag // since we modified tag.Location we must re-set it
-	}
-	for idx, tag := range r.outputs {
-		tag.Location = path.Join(ruleLocation, tag.Location)
-		artifact, exists := g.artifacts[tag.InternalTag()]
-		if !exists {
-			g.artifacts[tag.InternalTag()] = Artifact{
-				tag:     tag,
-				creator: &r,
-			}
-		} else if artifact.creator != nil {
-			// Artifact was already used as output previously.
-			return fmt.Errorf("artifact %s cannot be output two different times", tag.InternalTag())
-		} else {
-			// Artifact already exists but must be updated.
-			artifact.creator = &r
-			g.artifacts[tag.InternalTag()] = artifact
-		}
-		r.outputs[idx] = tag // since we modified tag.Location we must re-set it
 	}
 
 	g.rules[ruleHash] = r
@@ -165,6 +163,7 @@ func (g *Graph) touchArtifacts(touchedArtifacts []ArtifactTag) {
 // The final list of Rules only contains the hashes from the Rules, which serve as keys in the
 // internal Graph map for the Rules.
 // The order of this list of hashes is deemed non-deterministic.
+// @fixme no checking cyclic dependencies. Keep an history of visited nodes.
 func (g *Graph) resolve() []string {
 	var ruleHashes []string
 
@@ -238,20 +237,21 @@ func graphFromYAMLDozefile() (*Graph, error) {
 ---
 starters:
 menu:
-  - do: c:yacc
-    inputs: [parse.y]
-    outputs: [parse.h, parse.c]
-
-  - do: c:object-file
-    inputs: [parse.h, parse.c]
-    outputs: [parse.o]
+  - do: c:executable
+    inputs: [parse.o, main.o]
+    outputs: [exe]
 
   - do: c:object-file
     inputs: [parse.h, main.c]
     outputs: [main.o]
 
-  - do: c:executable
-    inputs: [parse.o, main.o]
+  - do: c:object-file
+    inputs: [parse.h, parse.c]
+    outputs: [parse.o]
+
+  - do: c:yacc
+    inputs: [parse.y]
+    outputs: [parse.h, parse.c]
 `
 	// yaml schema for doze
 
@@ -291,13 +291,11 @@ menu:
 		return nil, fmt.Errorf("missing 'menu' statement")
 	}
 
-	// @fixme create prepareTags.
-	// @fixme change createRule format
-	// @fixme add LocalLocation and GlobalLocation
+	location := path.Clean("./samples/sample-dir.in")
 	for _, action := range dozefileYAML.Menu {
-		err := g.createRule(prepareTags(action.Inputs), prepareTags(action.Outputs), nil, nil)
+		err := g.createRule(action.Inputs, action.Outputs, location, "")
 		if err != nil {
-			return fmt.Errorf("create rule:", err)
+			return nil, fmt.Errorf("%v, action: %v", err, action)
 		}
 	}
 
@@ -311,25 +309,25 @@ func main() {
 		artifacts: make(map[string]Artifact),
 	}
 
-	err := g.createRule([]ArtifactTag{ArtifactTag{"parse.o", ""}, ArtifactTag{"main.o", ""}}, []ArtifactTag{ArtifactTag{"exe", ""}}, location)
+	err := g.createRule([]string{"parse.o", "main.o"}, []string{"exe"}, location /* base location */, "" /* scoped location */)
 	if err != nil {
 		fmt.Println("create rule:", err)
 		return
 	}
 
-	err = g.createRule([]ArtifactTag{ArtifactTag{"parse.h", ""}, ArtifactTag{"parse.c", ""}}, []ArtifactTag{ArtifactTag{"parse.o", ""}}, location)
+	err = g.createRule([]string{"parse.h", "parse.c"}, []string{"parse.o"}, location, "")
 	if err != nil {
 		fmt.Println("create rule:", err)
 		return
 	}
 
-	err = g.createRule([]ArtifactTag{ArtifactTag{"parse.h", ""}, ArtifactTag{"main.c", ""}}, []ArtifactTag{ArtifactTag{"main.o", ""}}, location)
+	err = g.createRule([]string{"parse.h", "main.c"}, []string{"main.o"}, location, "")
 	if err != nil {
 		fmt.Println("create rule:", err)
 		return
 	}
 
-	err = g.createRule([]ArtifactTag{ArtifactTag{"parse.y", ""}}, []ArtifactTag{ArtifactTag{"parse.c", ""}, ArtifactTag{"parse.h", ""}}, location)
+	err = g.createRule([]string{"parse.y"}, []string{"parse.h", "parse.c"}, location, "")
 	if err != nil {
 		fmt.Println("create rule:", err)
 		return
@@ -338,16 +336,22 @@ func main() {
 	g.setExisting()
 	g.touchArtifacts([]ArtifactTag{ArtifactTag{"main.c", location}})
 
-	fmt.Println(g.rules)
-
 	rules := g.resolve()
 	g.execute(rules)
 
-	// ----------------------------
+	fmt.Println("--------------------------------------")
 
 	graph, err := graphFromYAMLDozefile()
+	if err != nil {
+		fmt.Println("got an error generating Graph from YAML:", err)
+		return
+	}
 
-	fmt.Println(graph)
+	graph.setExisting()
+	graph.touchArtifacts([]ArtifactTag{ArtifactTag{"main.c", location}})
+
+	rules = graph.resolve()
+	graph.execute(rules)
 }
 
 // 1. Load the Dozefile
