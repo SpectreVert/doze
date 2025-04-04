@@ -14,7 +14,7 @@ import (
 // The Rules and Artifacts are mapped using a Hash computed from their contents.
 type Graph struct {
 	rules     map[string]*Rule
-	artifacts map[string]Artifact
+	artifacts map[string]*Artifact
 }
 
 // A Rule represents an action that processes input Artifacts into output Artifacts by executing a Procedure.
@@ -85,7 +85,6 @@ RuleLoop:
 			artifact := graph.artifacts[tag.NormalizedTag()]
 			artifact.Exists = true
 			artifact.Modified = true
-			graph.artifacts[tag.NormalizedTag()] = artifact
 		}
 	}
 	newRuleHashes := graph.Resolve()
@@ -155,7 +154,7 @@ func (graph *Graph) AddRule(
 		}
 		_, ok := graph.artifacts[newTag.NormalizedTag()]
 		if !ok {
-			graph.artifacts[newTag.NormalizedTag()] = Artifact{
+			graph.artifacts[newTag.NormalizedTag()] = &Artifact{
 				tag: newTag,
 			}
 		}
@@ -171,7 +170,7 @@ func (graph *Graph) AddRule(
 		}
 		artifact, ok := graph.artifacts[newTag.NormalizedTag()]
 		if !ok {
-			graph.artifacts[newTag.NormalizedTag()] = Artifact{
+			graph.artifacts[newTag.NormalizedTag()] = &Artifact{
 				tag:     newTag,
 				creator: rule,
 			}
@@ -179,7 +178,6 @@ func (graph *Graph) AddRule(
 			return fmt.Errorf("artifact '%v' cannot be output by more than one rule", newTag.NormalizedTag())
 		} else {
 			artifact.creator = rule
-			graph.artifacts[newTag.NormalizedTag()] = artifact
 		}
 		rule.outputs = append(rule.outputs, newTag)
 	}
@@ -202,7 +200,6 @@ func (graph *Graph) MarkArtifactsAsExisting() {
 	for normalizedTag, artifact := range graph.artifacts {
 		_, err := os.Stat(normalizedTag)
 		artifact.Exists = (err == nil) // @robustness
-		graph.artifacts[normalizedTag] = artifact
 	}
 }
 
@@ -214,30 +211,27 @@ func (graph *Graph) markArtifactsAsModified(tags []ArtifactTag) {
 			panic("artifact '" + tag.NormalizedTag() + "'' does not exist")
 		}
 		artifact.Modified = true
-		graph.artifacts[tag.NormalizedTag()] = artifact
 	}
 }
 
 // Reset to false the Processed status of all Rules. This is run after every build.
 func (graph *Graph) resetProcessedRules() {
-	for ruleHash, rule := range graph.rules {
+	for _, rule := range graph.rules {
 		rule.Processed = false
-		graph.rules[ruleHash] = rule
 	}
 }
 
 // Reset to false the Modified status of all Artifacts. This is run after every build.
 func (graph *Graph) resetModifiedArtifacts() {
-	for normalizedTag, artifact := range graph.artifacts {
+	for _, artifact := range graph.artifacts {
 		artifact.Modified = false
-		graph.artifacts[normalizedTag] = artifact
 	}
 }
 
 func NewGraph() *Graph {
 	return &Graph{
 		rules:     make(map[string]*Rule),
-		artifacts: make(map[string]Artifact),
+		artifacts: make(map[string]*Artifact),
 	}
 }
 
