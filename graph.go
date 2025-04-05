@@ -21,7 +21,8 @@ type Graph struct {
 // Its Hash is computer by digesting
 type Rule struct {
 	inputs, outputs []ArtifactTag
-	// procedure Procedure
+	procID          ProcedureID
+
 	Processed bool
 }
 
@@ -130,10 +131,9 @@ RuleLoop:
 // input and outputs are Artifact names.
 // inputLocation and outputLocation are Artifact locations.
 // Returns an error if something went wrong and the Rule could not be registered.
-// @todo add support for Procedure.
 func (graph *Graph) AddRule(
 	inputs, outputs []string,
-	/* procedure, */
+	procID ProcedureID,
 	inputLocation, outputLocation string,
 ) error {
 	if len(inputs) == 0 {
@@ -143,8 +143,9 @@ func (graph *Graph) AddRule(
 		return fmt.Errorf("no outputs provided")
 	}
 
-	// @todo set Procedure here.
-	rule := &Rule{}
+	rule := &Rule{
+		procID: procID,
+	}
 
 	// create, then register input Artifacts, if they don't already exist.
 	for _, name := range inputs {
@@ -238,8 +239,7 @@ func NewGraph() *Graph {
 /* Rule */
 
 // The Hash function of a Rule. Obviously, must be deterministic.
-// Takes into account the ArtifactTags.
-// @todo should also take into account the Procedure. Need to think about how.
+// Takes into account the ArtifactTags and the ProcedureID.
 func (rule *Rule) Hash() string {
 	hash := crypto.MD5.New()
 
@@ -247,11 +247,11 @@ func (rule *Rule) Hash() string {
 	for _, inputTag := range rule.inputs {
 		hash.Write([]byte(inputTag.NormalizedTag()))
 	}
-
 	slices.SortFunc(rule.outputs, CompareArtifactTags)
 	for _, outputTag := range rule.outputs {
 		hash.Write([]byte(outputTag.NormalizedTag()))
 	}
+	hash.Write([]byte(rule.procID))
 
 	return fmt.Sprintf("%x", hash.Sum(nil))
 }
