@@ -76,7 +76,7 @@ RuleLoop:
 			}
 		}
 
-		fmt.Println("Running rule", hash)
+		rule.Execute(hash)
 
 		// mark the Rule as Processed
 		rule.Processed = true
@@ -237,6 +237,11 @@ func NewGraph() *Graph {
 }
 
 /* Rule */
+
+// Placeholder function for running a Rule synchronously.
+func (rule *Rule) Execute(hash string) {
+	fmt.Println("run '" + string(rule.procID) + "' [" + hash + "]")
+}
 
 // The Hash function of a Rule. Obviously, must be deterministic.
 // Takes into account the ArtifactTags and the ProcedureID.
