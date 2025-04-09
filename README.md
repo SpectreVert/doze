@@ -4,14 +4,9 @@ A modulable and minimalist build system.
 
 ## Goals
 
-- Artifact based
+- Artifacts based
 - Easy to operate and to extend
 - Local and remote build caches
-- Not slow with large codebases
-
-In addition here are some stretch goals:
-
-- Remote build execution
 
 ## Design
 
