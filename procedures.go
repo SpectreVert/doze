@@ -3,7 +3,6 @@ package doze
 import (
 	"fmt"
 	"strings"
-	"sync"
 )
 
 // Procedure is an interface that should be implemented by the operator to customize the type
@@ -61,8 +60,6 @@ func RegisterProcedure(instance Procedure) {
 		panic("ProcedureInfo.New must return a non-nil procedure instance")
 	}
 
-	procsMutex.Lock()
-	defer procsMutex.Unlock()
 	if _, ok := procedures[procInfo.ID]; ok {
 		panic(fmt.Sprintf("procedure already registered: '%s'", procInfo.ID))
 	}
@@ -71,8 +68,6 @@ func RegisterProcedure(instance Procedure) {
 
 // GetProcedure returns a Procedure information from its ID.
 func GetProcedure(id ProcedureID) (ProcedureInfo, error) {
-	procsMutex.Lock()
-	defer procsMutex.Unlock()
 	p, ok := procedures[id]
 	if !ok {
 		return ProcedureInfo{}, fmt.Errorf("procedure not registered:", id)
@@ -82,7 +77,4 @@ func GetProcedure(id ProcedureID) (ProcedureInfo, error) {
 
 const procedureIDSeparator = ":"
 
-var (
-	procedures = make(map[ProcedureID]ProcedureInfo)
-	procsMutex sync.RWMutex
-)
+var procedures = make(map[ProcedureID]ProcedureInfo)
