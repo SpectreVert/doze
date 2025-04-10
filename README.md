@@ -36,4 +36,4 @@ rules:
 
 A rule defines a procedure to use, a set of input artifacts and a set of outputs. In this repository are provided two example procedures, `lang:c:object_file` and `lang:c:executable` to respectively build C object files and C executables. Their implementation is store in [procedures/lang_c/main.go](./procedures/lang_c/main.go). Registering a procedure in the `init` function of their modules embeds it directly in the doze executable.
 
-There is restriction on the order in which the rules are declared. Doze will only execute rules which are ready to execute; that is those which have all of their inputs ready for processingj.
+There is no restriction on the order in which the rules are declared. Doze will only execute rules which are ready to execute; that is those which have all of their inputs ready for processing.
