@@ -8,7 +8,8 @@ import (
 // Procedure is an interface that should be implemented by the operator to customize the type
 // of work that doze can do. A Procedure can only be called from doze after being registered.
 type Procedure interface {
-	DozeProcedure() ProcedureInfo
+	GetProcedureInfo() ProcedureInfo
+	Execute(*Rule) error
 }
 
 // A ProcedureInfo represents a registered doze Procedure.
@@ -48,7 +49,7 @@ func (id ProcedureID) Name() string {
 // Any amount of Procedure instances may be created from it.
 // Duplicate Procedures are not accepted.
 func RegisterProcedure(instance Procedure) {
-	procInfo := instance.DozeProcedure()
+	procInfo := instance.GetProcedureInfo()
 
 	if procInfo.ID == "" {
 		panic("procedure ID is missing")
@@ -61,7 +62,7 @@ func RegisterProcedure(instance Procedure) {
 	}
 
 	if _, ok := procedures[procInfo.ID]; ok {
-		panic(fmt.Sprintf("procedure already registered: '%s'", procInfo.ID))
+		panic(fmt.Sprintf("procedure already registered: '%v'", procInfo.ID))
 	}
 	procedures[procInfo.ID] = procInfo
 }
@@ -70,7 +71,7 @@ func RegisterProcedure(instance Procedure) {
 func GetProcedure(id ProcedureID) (ProcedureInfo, error) {
 	p, ok := procedures[id]
 	if !ok {
-		return ProcedureInfo{}, fmt.Errorf("procedure not registered:", id)
+		return ProcedureInfo{}, fmt.Errorf("procedure not registered: '%v'", id)
 	}
 	return p, nil
 }

@@ -1,39 +1,28 @@
 package main
 
 import (
-	"github.com/spectrevert/doze"
+	"fmt"
+	"os"
+
+	"github.com/spectrevert/doze/dozefile"
+
+	// Plug in Doze procedures under this comment.
+	_ "github.com/spectrevert/doze/procedures/lang_c"
 )
 
 func main() {
-	graph := doze.NewGraph()
+	var dozefilePath = "Dozefile.yaml"
 
-	graph.AddRule(
-		[]string{"main.c", "parse.h"},
-		[]string{"main.o"},
-		"lang:c:object_file",
-		"", "",
-	)
-	graph.AddRule(
-		[]string{"parse.c", "parse.h"},
-		[]string{"parse.o"},
-		"lang:c:object_file",
-		"", "",
-	)
-	graph.AddRule(
-		[]string{"parse.y"},
-		[]string{"parse.h", "parse.c"},
-		"lang:c:yacc",
-		"", "",
-	)
-	graph.AddRule(
-		[]string{"parse.o", "main.o"},
-		[]string{"exe"},
-		"lang:c:executable",
-		"", "",
-	)
+	graph, err := dozefile.ParseDozefileYAML(dozefilePath)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 
 	graph.MarkArtifactsAsExisting()
-
 	ruleHashes := graph.Resolve()
+	if len(ruleHashes) == 0 {
+		fmt.Println("Nothing to do.")
+	}
 	graph.Execute(ruleHashes)
 }

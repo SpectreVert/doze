@@ -17,10 +17,14 @@ type Graph struct {
 	artifacts map[string]*Artifact
 }
 
+func (graph *Graph) GetArtifacts() map[string]*Artifact {
+	return graph.artifacts
+}
+
 // A Rule represents an action that processes input Artifacts into output Artifacts by executing a Procedure.
 // Its Hash is computer by digesting
 type Rule struct {
-	inputs, outputs []ArtifactTag
+	Inputs, Outputs []ArtifactTag
 	procID          ProcedureID
 
 	Processed bool
@@ -56,6 +60,7 @@ type ArtifactTag struct {
 // Before returning the function resolves the Graph again, taking into account the updated status
 // of the Rules that were exected, and calls itself recursively with the new list of resolved Rules,
 // if it's not empty.
+// Execute runs syncronously and single-threadedly.
 func (graph *Graph) Execute(ruleHashes []string) {
 RuleLoop:
 	for _, hash := range ruleHashes {
@@ -65,7 +70,7 @@ RuleLoop:
 		}
 
 		// if any input is missing, the Rule has to be postponed
-		for _, tag := range rule.inputs {
+		for _, tag := range rule.Inputs {
 			artifact := graph.artifacts[tag.NormalizedTag()]
 			if !artifact.Exists {
 				// if the artifact doesn't have any creatorRule and it doesn't exist that's not good...
@@ -82,7 +87,7 @@ RuleLoop:
 		rule.Processed = true
 
 		// mark its outputs as Existing and Modified
-		for _, tag := range rule.outputs {
+		for _, tag := range rule.Outputs {
 			artifact := graph.artifacts[tag.NormalizedTag()]
 			artifact.Exists = true
 			artifact.Modified = true
@@ -105,7 +110,7 @@ RuleLoop:
 			// Rule's been processed already. Go next.
 			continue
 		}
-		for _, tag := range rule.inputs {
+		for _, tag := range rule.Inputs {
 			if graph.artifacts[tag.NormalizedTag()].Modified {
 				// Rule has a modified input. Schedule the Rule.
 				if !slices.Contains(ruleHashes, hash) {
@@ -114,7 +119,7 @@ RuleLoop:
 				continue RuleLoop
 			}
 		}
-		for _, tag := range rule.outputs {
+		for _, tag := range rule.Outputs {
 			if !graph.artifacts[tag.NormalizedTag()].Exists {
 				// Rule has a non-existing output. Schedule the Rule.
 				if !slices.Contains(ruleHashes, hash) {
@@ -159,7 +164,7 @@ func (graph *Graph) AddRule(
 				tag: newTag,
 			}
 		}
-		rule.inputs = append(rule.inputs, newTag)
+		rule.Inputs = append(rule.Inputs, newTag)
 	}
 
 	// ditto for output Artifacts, but also handle its creator Rule,
@@ -180,7 +185,7 @@ func (graph *Graph) AddRule(
 		} else {
 			artifact.creator = rule
 		}
-		rule.outputs = append(rule.outputs, newTag)
+		rule.Outputs = append(rule.Outputs, newTag)
 	}
 
 	// the Hash will be used to check for duplicates and to store the Rule in the Graph.
@@ -240,7 +245,16 @@ func NewGraph() *Graph {
 
 // Placeholder function for running a Rule synchronously.
 func (rule *Rule) Execute(hash string) {
-	fmt.Println("run '" + string(rule.procID) + "' [" + hash + "]")
+	procInfo, err := GetProcedure(rule.procID)
+	if err != nil {
+		fmt.Println("rule.Execute:", err)
+		os.Exit(2)
+	}
+	proc := procInfo.New()
+	if err = proc.Execute(rule); err != nil {
+		fmt.Println("rule.Execute:", err)
+		os.Exit(2)
+	}
 }
 
 // The Hash function of a Rule. Obviously, must be deterministic.
@@ -248,12 +262,12 @@ func (rule *Rule) Execute(hash string) {
 func (rule *Rule) Hash() string {
 	hash := crypto.MD5.New()
 
-	slices.SortFunc(rule.inputs, CompareArtifactTags)
-	for _, inputTag := range rule.inputs {
+	slices.SortFunc(rule.Inputs, CompareArtifactTags)
+	for _, inputTag := range rule.Inputs {
 		hash.Write([]byte(inputTag.NormalizedTag()))
 	}
-	slices.SortFunc(rule.outputs, CompareArtifactTags)
-	for _, outputTag := range rule.outputs {
+	slices.SortFunc(rule.Outputs, CompareArtifactTags)
+	for _, outputTag := range rule.Outputs {
 		hash.Write([]byte(outputTag.NormalizedTag()))
 	}
 	hash.Write([]byte(rule.procID))
