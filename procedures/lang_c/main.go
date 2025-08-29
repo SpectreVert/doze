@@ -2,6 +2,7 @@ package lang_c
 
 import (
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
 
@@ -50,10 +51,33 @@ func (ObjectFile) Execute(rule *doze.Rule) error {
 	}
 
 	cmd := exec.Command("gcc", "-c", sourceFile, "-o", objectFile)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("error executing 'gcc': %v", err)
+	fmt.Println("doze: gcc -c", sourceFile, "-o", objectFile)
+
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("error creating stderr pipeline: %v", err)
 	}
-	fmt.Println("doze: gcc -o", objectFile, "-c", sourceFile)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("error creating stdout pipeline: %v", err)
+	}
+
+	if err = cmd.Start(); err != nil {
+		return fmt.Errorf("error starting 'gcc': %v", err)
+	}
+
+	slurp, _ := io.ReadAll(stdout)
+	if len(slurp) > 0 {
+		fmt.Printf("%s\n", slurp)
+	}
+	slurp, _ = io.ReadAll(stderr)
+	if len(slurp) > 0 {
+		fmt.Printf("%s\n", slurp)
+	}
+
+	if err = cmd.Wait(); err != nil {
+		return fmt.Errorf("error waiting for 'gcc': %v", err)
+	}
 
 	return nil
 }
