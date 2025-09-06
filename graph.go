@@ -1,10 +1,10 @@
 package doze
 
 import (
+	"container/list"
 	"crypto"
 	_ "crypto/md5"
 	"fmt"
-	"os"
 	"path"
 	"slices"
 	"strings"
@@ -17,36 +17,28 @@ type Graph struct {
 	artifacts map[string]*Artifact
 }
 
-func (graph *Graph) GetArtifacts() map[string]*Artifact {
-	return graph.artifacts
-}
-
 // A Rule represents an action that processes input Artifacts into output Artifacts by executing a Procedure.
-// Its Hash is computer by digesting
+// Inputs and Outputs contain only the Tags of the Artifacts.
+// Its Hash is computed by digesting the input and output Tags, as well as the Procedure ID.
 type Rule struct {
 	Inputs, Outputs []ArtifactTag
 	procID          ProcedureID
 
-	Processed bool
+	Scheduled bool
 }
 
-// An Artifact represents a file which is processed or created by Doze in the context of a build.
-// Internally and to the operator, Artifacts are represented by their ArtifactTag.
-// The Artifact keeps track of its own status:
-//   - Exists is true if the Artifact is found to exist on the disk.
-//   - Modified is true if the Artifact was touched by the operator since the last build or
-//     if the Artifact was created by a Doze rule in the current build.
+// An Artifact represents a file which is processed, or created by Doze in the context of a build.
+// Internally and to the operator, Artifacts are referred to by their ArtifactTag.
 type Artifact struct {
-	tag     ArtifactTag
-	creator *Rule
-
-	Exists, Modified bool
+	tag       ArtifactTag
+	creator   *Rule   // The Rule which creates this Artifact. If nil, the Artifact is said to be 'primordial'.
+	consumers []*Rule // The Rule(s) which depend on this Artifact to be run.
 }
 
 // An ArtifactTag represents the path on disk to an Artifact.
-// Internally its value is split into its name and its location.
-// Its Hash is computer by digesting the normalized path made of the location and the name,
-// thus reconstructing its real path on disk. Artifacts therefore cannot have duplicates.
+// Internally, its value is split between its file name, and its location.
+// Its Hash is computed by unifying these two values as a NormalizedTag, which points to the real location of the Artifact on disk.
+// Artifacts with the same NormalizedTag cannot be distinct.
 type ArtifactTag struct {
 	name, location string
 }
@@ -55,87 +47,76 @@ type ArtifactTag struct {
 
 /* Graph */
 
-// Execute to completion a non-sorted list of Rules, passed by their Hashes, with the goal
-// of bringing the Graph up-to-date. Rules which are not ready for execution yet are postponed.
-// Before returning the function resolves the Graph again, taking into account the updated status
-// of the Rules that were exected, and calls itself recursively with the new list of resolved Rules,
-// if it's not empty.
-// Execute runs syncronously and single-threadedly.
-func (graph *Graph) Execute(ruleHashes []string) {
-RuleLoop:
-	for _, hash := range ruleHashes {
-		rule, ok := graph.rules[hash]
-		if !ok {
-			panic("rule '" + hash + "' resolved for execution but doesn't exist")
-		}
-
-		// if any input is missing, the Rule has to be postponed
-		for _, tag := range rule.Inputs {
-			artifact := graph.artifacts[tag.NormalizedTag()]
-			if !artifact.Exists {
-				// if the artifact doesn't have any creatorRule and it doesn't exist that's not good...
-				if artifact.creator == nil {
-					panic("artifact '" + tag.NormalizedTag() + "' doesn't exist and doesn't have a creator Rule")
-				}
-				continue RuleLoop
-			}
-		}
-
-		rule.Execute(hash)
-
-		// mark the Rule as Processed
-		rule.Processed = true
-
-		// mark its outputs as Existing and Modified
-		for _, tag := range rule.Outputs {
-			artifact := graph.artifacts[tag.NormalizedTag()]
-			artifact.Exists = true
-			artifact.Modified = true
-		}
-	}
-	newRuleHashes := graph.Resolve()
-	if len(newRuleHashes) > 0 {
-		graph.Execute(newRuleHashes)
+func NewGraph() *Graph {
+	return &Graph{
+		rules:     make(map[string]*Rule),
+		artifacts: make(map[string]*Artifact),
 	}
 }
 
-// Resolve and return a non-sorted list of Hashes of Rules. These Rules should be executed to bring
-// the Graph up-to-date. Of course, if the returned list is nil, then there is nothing to do.
+// Resolve computes a list of Rules for Graph, ordered topologically based on their dependencies.
+// This list is called the execution plan.
 func (graph *Graph) Resolve() []string {
-	var ruleHashes []string
+	// Algorith to compute the topological order of the Graph. (Kahn's Algorithm)
+	// The hard thing to grasp is that a Rule makes up both nodes and edges.
+	// Essentially, a node is a group of input or output Artifacts. An edge is the Rule that transforms them.
 
-RuleLoop:
+	// Make a list of all Rules whose input Artifacts do not have a creator Rule. These are called primordial Rules.
+	var primordialRules = list.New()
+PrimordialRulesLoop:
 	for hash, rule := range graph.rules {
-		if rule.Processed {
-			// Rule's been processed already. Go next.
-			continue
-		}
 		for _, tag := range rule.Inputs {
-			if graph.artifacts[tag.NormalizedTag()].Modified {
-				// Rule has a modified input. Schedule the Rule.
-				if !slices.Contains(ruleHashes, hash) {
-					ruleHashes = append(ruleHashes, hash)
-				}
-				continue RuleLoop
+			if graph.artifacts[tag.NormalizedTag()].creator != nil {
+				continue PrimordialRulesLoop
 			}
 		}
-		for _, tag := range rule.Outputs {
-			if !graph.artifacts[tag.NormalizedTag()].Exists {
-				// Rule has a non-existing output. Schedule the Rule.
-				if !slices.Contains(ruleHashes, hash) {
-					ruleHashes = append(ruleHashes, hash)
+		primordialRules.PushBack(hash)
+	}
+
+	var plan []string
+	// While primordialRules is not empty
+	for e := primordialRules.Front(); e != nil; e = primordialRules.Front() {
+		ruleHash := primordialRules.Remove(e).(string)
+		graph.rules[ruleHash].Scheduled = true
+		plan = append(plan, ruleHash)
+
+		// Iterate over each output Artifact of Rule `ruleHash` to inspect Rules which depend on them.
+		for _, outputTag := range graph.rules[ruleHash].Outputs {
+		CheckConsumerRules:
+			// `consumerRule` is a Rule that depends on `outputTag` (representing an output Artifact of `ruleHash`).
+			// `consumerRule` might have all its input Artifacts ready for consumption, meaning that these Artifacts either have no creator Rule, or that their
+			// creator Rule is already scheduled (and in the plan). In that case, the `consumerRule` can be scheduled and added to the plan.
+			for _, consumerRule := range graph.artifacts[outputTag.NormalizedTag()].consumers {
+				for _, consumerTag := range consumerRule.Inputs {
+					if graph.artifacts[consumerTag.NormalizedTag()].creator != nil && !graph.artifacts[consumerTag.NormalizedTag()].creator.Scheduled {
+						continue CheckConsumerRules
+					}
 				}
-				continue RuleLoop
+				// It's also possible that this Rule was already scheduled during the same iterator over `consumers` Rule of `outputTag`.
+				if !graph.rules[consumerRule.Hash()].Scheduled {
+					graph.rules[consumerRule.Hash()].Scheduled = true
+					primordialRules.PushBack(consumerRule.Hash())
+				}
 			}
 		}
 	}
-	return ruleHashes
+
+	return plan
 }
 
-// Registers a new Rule with the Graph.
-// input and outputs are Artifact names.
-// inputLocation and outputLocation are Artifact locations.
-// Returns an error if something went wrong and the Rule could not be registered.
+// AddRule registers a new Rule with the Graph.
+//
+// `inputs` and `outputs` are lists of file names (not Normalized Tags!)
+//
+// `inputLocation` and `outputLocation` point to a directory containing, respectively, the input files and the output files, relative to the Dozefile.
+// `inputLocation` and `outputLocation` may be empty, if the files are in the same directory as the Dozefile.
+//
+// `procID` is the Procedure ID that will be used in the Rule.
+//
+// Returns an error if something went wrong, and the Rule could not be registered.
+//
+// ---------------------------------------------------------
+// TODO: Check that an input is also not provided as output.
 func (graph *Graph) AddRule(
 	inputs, outputs []string,
 	procID ProcedureID,
@@ -152,7 +133,8 @@ func (graph *Graph) AddRule(
 		procID: procID,
 	}
 
-	// create, then register input Artifacts, if they don't already exist.
+	// For each input, create the Artifact, if it doesn't exist yet, otherwise fetch it.
+	// Add `rule` as a consumer Rule of the Artifact.
 	for _, name := range inputs {
 		newTag := ArtifactTag{
 			name,
@@ -165,10 +147,12 @@ func (graph *Graph) AddRule(
 			}
 		}
 		rule.Inputs = append(rule.Inputs, newTag)
+		graph.artifacts[newTag.NormalizedTag()].consumers = append(graph.artifacts[newTag.NormalizedTag()].consumers, rule)
 	}
 
-	// ditto for output Artifacts, but also handle its creator Rule,
-	// and check that the Artifact is not already an output of another Rule.
+	// For each output, create the Artifact, if it doesn't exist yet, otherwise fetch it.
+	// Check that the Artifact does not already have a creator Rule.
+	// Add `rule` as the creator Rule of the Artifact.
 	for _, name := range outputs {
 		newTag := ArtifactTag{
 			name,
@@ -188,10 +172,9 @@ func (graph *Graph) AddRule(
 		rule.Outputs = append(rule.Outputs, newTag)
 	}
 
-	// the Hash will be used to check for duplicates and to store the Rule in the Graph.
+	// The Hash will be used to check for duplicates, and as a key to the Rule in the Graph.
 	ruleHash := rule.Hash()
 
-	// duplicate check of the Rule.
 	_, ok := graph.rules[ruleHash]
 	if ok {
 		return fmt.Errorf("rule already exists with the same data")
@@ -201,64 +184,10 @@ func (graph *Graph) AddRule(
 	return nil
 }
 
-// Set the Exists flag to true for Artifacts which exist on disk.
-func (graph *Graph) MarkArtifactsAsExisting() {
-	for normalizedTag, artifact := range graph.artifacts {
-		_, err := os.Stat(normalizedTag)
-		artifact.Exists = (err == nil) // @robustness
-	}
-}
-
-// Set the Modified flag to true for Artifacts whose tags are passed.
-func (graph *Graph) markArtifactsAsModified(tags []ArtifactTag) {
-	for _, tag := range tags {
-		artifact, ok := graph.artifacts[tag.NormalizedTag()]
-		if !ok {
-			panic("artifact '" + tag.NormalizedTag() + "'' does not exist")
-		}
-		artifact.Modified = true
-	}
-}
-
-// Reset to false the Processed status of all Rules. This is run after every build.
-func (graph *Graph) resetProcessedRules() {
-	for _, rule := range graph.rules {
-		rule.Processed = false
-	}
-}
-
-// Reset to false the Modified status of all Artifacts. This is run after every build.
-func (graph *Graph) resetModifiedArtifacts() {
-	for _, artifact := range graph.artifacts {
-		artifact.Modified = false
-	}
-}
-
-func NewGraph() *Graph {
-	return &Graph{
-		rules:     make(map[string]*Rule),
-		artifacts: make(map[string]*Artifact),
-	}
-}
-
 /* Rule */
 
-// Placeholder function for running a Rule synchronously.
-func (rule *Rule) Execute(hash string) {
-	procInfo, err := GetProcedure(rule.procID)
-	if err != nil {
-		fmt.Println("rule.Execute:", err)
-		os.Exit(2)
-	}
-	proc := procInfo.New()
-	if err = proc.Execute(rule); err != nil {
-		fmt.Println("rule.Execute:", err)
-		os.Exit(2)
-	}
-}
-
 // The Hash function of a Rule. Obviously, must be deterministic.
-// Takes into account the ArtifactTags and the ProcedureID.
+// Takes into account the input and output ArtifactTags, and the ProcedureID.
 func (rule *Rule) Hash() string {
 	hash := crypto.MD5.New()
 
@@ -277,13 +206,13 @@ func (rule *Rule) Hash() string {
 
 /* ArtifactTag */
 
-// This is what the Graph uses as a key to an Artifact object.
-// It's also the actual path of the Artifact on disk.
+// A NormalizedTag is the actual path of an Artifact on disk.
+// It's used as the key to an Artifact object in the Graph.
 func (tag *ArtifactTag) NormalizedTag() string {
 	return path.Join(tag.location, tag.name)
 }
 
-// Required for respecting a deterministic order when hashing a Rule.
+// Returns a deterministic ordering for ArtifactTags, used when hashing a Rule.
 func CompareArtifactTags(first, second ArtifactTag) int {
 	return strings.Compare(first.NormalizedTag(), second.NormalizedTag())
 }

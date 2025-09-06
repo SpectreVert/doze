@@ -1,0 +1,11 @@
+---
+rules:
+  - do: lang:c:object_file
+    inputs: [parse.h, parse.c]
+    outputs: [parse.o]
+  - do: lang:c:object_file
+    inputs: [parse.h, main.c]
+    outputs: [main.o]
+  - do: lang:c:executable
+    inputs: [parse.o, main.o]
+    outputs: [exe]

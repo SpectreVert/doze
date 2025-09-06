@@ -5,29 +5,29 @@ import (
 	"strings"
 )
 
-// Procedure is an interface that should be implemented by the operator to customize the type
-// of work that doze can do. A Procedure can only be called from doze after being registered.
+// Procedure is an interface that is implemented by the user to customize the type of work that Doze can do.
+// A Procedure can only be run by Doze after being registered.
 type Procedure interface {
+	// Returns the Procedure's ProcedureInfo.
 	GetProcedureInfo() ProcedureInfo
+	// Execute the Rule with the Procedure.
 	Execute(*Rule) error
 }
 
-// A ProcedureInfo represents a registered doze Procedure.
+// A ProcedureInfo represents a Procedure registered with the Doze executable.
+// - ID is the full name of the Procedure. It is unique and namespaced.
+// - New() returns a pointer to a new instance of the Procedure.
 type ProcedureInfo struct {
-	// ID is the full name of the Procedure. It is unique and namespaced.
-	ID ProcedureID
-
-	// New returns a pointer to a new instance of the Procedure.
+	ID  ProcedureID
 	New func() Procedure
 }
 
-// ProcedureID is a string that uniquely identifies a doze Procedure.
+// ProcedureID is a string that uniquely identifies a Doze Procedure.
 // It is made up of colon separated labels which form a hierarchy from left to right,
-// with the last label making up the Procedure name and the labels before that making
-// its namespace.
+// with the last label making up the Procedure name and the labels before that making its namespace.
 type ProcedureID string
 
-// Namespace returns the namespace portion of a ProcedureID if it exists or an empty string.
+// Namespace returns the namespace portion of a ProcedureID, if it exists, or an empty string.
 func (id ProcedureID) Namespace() string {
 	lastSeparator := strings.LastIndex(string(id), procedureIDSeparator)
 	if lastSeparator < 0 {
@@ -45,7 +45,7 @@ func (id ProcedureID) Name() string {
 	return portions[len(portions)-1]
 }
 
-// RegisterProcedure registers a new Procedure in the doze global Procedure store.
+// RegisterProcedure registers a new Procedure in the Doze global Procedure map.
 // Any amount of Procedure instances may be created from it.
 // Duplicate Procedures are not accepted.
 func RegisterProcedure(instance Procedure) {
@@ -78,4 +78,5 @@ func GetProcedure(id ProcedureID) (ProcedureInfo, error) {
 
 const procedureIDSeparator = ":"
 
+// The Procedures registered with the Doze executable.
 var procedures = make(map[ProcedureID]ProcedureInfo)

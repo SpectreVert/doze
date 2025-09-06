@@ -19,10 +19,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	graph.MarkArtifactsAsExisting()
-	ruleHashes := graph.Resolve()
-	if len(ruleHashes) == 0 {
-		fmt.Println("Nothing to do.")
-	}
-	graph.Execute(ruleHashes)
+	var plan = graph.Resolve()
+	graph.Execute(plan)
 }
