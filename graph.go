@@ -33,6 +33,8 @@ type Artifact struct {
 	tag       ArtifactTag
 	creator   *Rule   // The Rule which creates this Artifact. If nil, the Artifact is said to be 'primordial'.
 	consumers []*Rule // The Rule(s) which depend on this Artifact to be run.
+
+	Exists, Modified bool
 }
 
 // An ArtifactTag represents the path on disk to an Artifact.
@@ -61,22 +63,23 @@ func (graph *Graph) Resolve() []string {
 	// The hard thing to grasp is that a Rule makes up both nodes and edges.
 	// Essentially, a node is a group of input or output Artifacts. An edge is the Rule that transforms them.
 
-	// Make a list of all Rules whose input Artifacts do not have a creator Rule. These are called primordial Rules.
-	var primordialRules = list.New()
-PrimordialRulesLoop:
+	// Make an initial list of Rules whose input Artifacts do not have a creator Rule. These are called primordial Rules.
+	// We add them to the list of Rules to inspect next for scheduling.
+	var rulesToInspect = list.New()
+RulesToInspectLoop:
 	for hash, rule := range graph.rules {
 		for _, tag := range rule.Inputs {
 			if graph.artifacts[tag.NormalizedTag()].creator != nil {
-				continue PrimordialRulesLoop
+				continue RulesToInspectLoop
 			}
 		}
-		primordialRules.PushBack(hash)
+		rulesToInspect.PushBack(hash)
 	}
 
 	var plan []string
-	// While primordialRules is not empty
-	for e := primordialRules.Front(); e != nil; e = primordialRules.Front() {
-		ruleHash := primordialRules.Remove(e).(string)
+	// While rulesToInspect is not empty
+	for e := rulesToInspect.Front(); e != nil; e = rulesToInspect.Front() {
+		ruleHash := rulesToInspect.Remove(e).(string)
 		graph.rules[ruleHash].Scheduled = true
 		plan = append(plan, ruleHash)
 
@@ -95,7 +98,7 @@ PrimordialRulesLoop:
 				// It's also possible that this Rule was already scheduled during the same iterator over `consumers` Rule of `outputTag`.
 				if !graph.rules[consumerRule.Hash()].Scheduled {
 					graph.rules[consumerRule.Hash()].Scheduled = true
-					primordialRules.PushBack(consumerRule.Hash())
+					rulesToInspect.PushBack(consumerRule.Hash())
 				}
 			}
 		}
