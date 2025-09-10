@@ -5,6 +5,7 @@ import (
 	"crypto"
 	_ "crypto/md5"
 	"fmt"
+	"os"
 	"path"
 	"slices"
 	"strings"
@@ -56,10 +57,65 @@ func NewGraph() *Graph {
 	}
 }
 
+// Reset all Artifacts Modified and Exists flags.
+// For now, we assume that primordial Artifacts are never Modified...
+func (graph *Graph) SetArtifactStates() {
+	for normalizedTag, artifact := range graph.artifacts {
+		_, err := os.Stat(normalizedTag)
+		artifact.Exists = (err == nil)
+		// We don't know yet if the Artifact was modified.
+		artifact.Modified = false
+	}
+}
+
+// Execute to completion a topologically sorted list of Rules (identified by their Hash), with the goal of bringing the Graph up-to-date.
+// Executes synchronously and single-threadedly.
+func (graph *Graph) Execute(plan []string) {
+	// Check if Artifacts exist and if they have been Modified.
+	graph.SetArtifactStates()
+
+	var executedRules = 0
+	for _, ruleHash := range plan {
+		rule, ok := graph.rules[ruleHash]
+		if !ok {
+			panic("rule [" + ruleHash + "] resolved for execution but doesn't exist")
+		}
+
+		var ruleIsOutdated = false
+		for _, inputTag := range rule.Inputs {
+			if graph.artifacts[inputTag.NormalizedTag()].Modified {
+				ruleIsOutdated = true
+				goto OutdatedRule
+			}
+		}
+		for _, outputTag := range rule.Outputs {
+			if !graph.artifacts[outputTag.NormalizedTag()].Exists {
+				ruleIsOutdated = true
+				goto OutdatedRule
+			}
+		}
+
+	OutdatedRule:
+		if ruleIsOutdated {
+			rule.Execute()
+			executedRules += 1
+
+			// Mark all output Artifacts as modified.
+			for _, outputTag := range rule.Outputs {
+				graph.artifacts[outputTag.NormalizedTag()].Modified = true
+			}
+		}
+	}
+
+	if executedRules == 0 {
+		fmt.Println("doze: Nothing to do.")
+	}
+}
+
 // Resolve computes a list of Rules for Graph, ordered topologically based on their dependencies.
 // This list is called the execution plan.
 func (graph *Graph) Resolve() []string {
-	// Algorith to compute the topological order of the Graph. (Kahn's Algorithm)
+	// Computes the topological order of the Graph. (Kahn's Algorithm)
 	// The hard thing to grasp is that a Rule makes up both nodes and edges.
 	// Essentially, a node is a group of input or output Artifacts. An edge is the Rule that transforms them.
 
@@ -188,6 +244,21 @@ func (graph *Graph) AddRule(
 }
 
 /* Rule */
+
+// Placeholder function for running a Rule synchronously.
+// TODO: return an error rather than calling os.Exit().
+func (rule *Rule) Execute() {
+	procInfo, err := GetProcedure(rule.procID)
+	if err != nil {
+		fmt.Println("rule.Execute:", err)
+		os.Exit(2)
+	}
+	proc := procInfo.New()
+	if err = proc.Execute(rule); err != nil {
+		fmt.Println("rule.Execute:", err)
+		os.Exit(2)
+	}
+}
 
 // The Hash function of a Rule. Obviously, must be deterministic.
 // Takes into account the input and output ArtifactTags, and the ProcedureID.
