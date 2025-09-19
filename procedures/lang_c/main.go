@@ -30,21 +30,21 @@ func (ObjectFile) GetProcedureInfo() doze.ProcedureInfo {
 func (ObjectFile) Execute(rule *doze.Rule) error {
 	var sourceFile, objectFile string
 	for _, input := range rule.Inputs {
-		if strings.HasSuffix(input.NormalizedTag(), ".c") {
+		if strings.HasSuffix(input.Path(), ".c") {
 			if sourceFile != "" {
 				return fmt.Errorf("found more than one '.c' file in rule %v", rule)
 			}
-			sourceFile = input.NormalizedTag()
-		} else if !strings.HasSuffix(input.NormalizedTag(), ".h") {
+			sourceFile = input.Path()
+		} else if !strings.HasSuffix(input.Path(), ".h") {
 			return fmt.Errorf("found a non-c source code file declared in rule %v", rule)
 		}
 	}
 	for _, output := range rule.Outputs {
-		if strings.HasSuffix(output.NormalizedTag(), ".o") {
+		if strings.HasSuffix(output.Path(), ".o") {
 			if objectFile != "" {
 				return fmt.Errorf("found more than one '.o' file in rule %v", rule)
 			}
-			objectFile = output.NormalizedTag()
+			objectFile = output.Path()
 		} else {
 			return fmt.Errorf("found a non-c object file declared in rule %v", rule)
 		}
@@ -96,15 +96,15 @@ func (Executable) Execute(rule *doze.Rule) error {
 	var inputs []string
 
 	for _, input := range rule.Inputs {
-		if !strings.HasSuffix(input.NormalizedTag(), ".o") {
+		if !strings.HasSuffix(input.Path(), ".o") {
 			return fmt.Errorf("found a non-c object fiel declared in rule %v", rule)
 		}
-		inputs = append(inputs, input.NormalizedTag())
+		inputs = append(inputs, input.Path())
 	}
 	if len(rule.Outputs) > 1 {
 		return fmt.Errorf("found more than one output in rule %v", rule)
 	}
-	var executable = rule.Outputs[0].NormalizedTag()
+	var executable = rule.Outputs[0].Path()
 	args := []string{"-o", executable}
 	args = append(args, inputs...)
 

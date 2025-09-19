@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -97,6 +98,7 @@ func (graph *Graph) Execute(plan []string) {
 
 	OutdatedRule:
 		if ruleIsOutdated {
+			fmt.Println("rule:", ruleHash)
 			rule.Execute()
 			executedRules += 1
 
@@ -280,8 +282,13 @@ func (rule *Rule) Hash() string {
 
 /* ArtifactTag */
 
-// A NormalizedTag is the actual path of an Artifact on disk.
-// It's used as the key to an Artifact object in the Graph.
+// Returns the actual path of the Artifact on disk.
+func (tag *ArtifactTag) Path() string {
+	return filepath.Join(tag.location, tag.name)
+}
+
+// A NormalizedTag is the string identifier used by doze internally as the key
+// to the Artifact object in the Graph.
 func (tag *ArtifactTag) NormalizedTag() string {
 	return path.Join(tag.location, tag.name)
 }
