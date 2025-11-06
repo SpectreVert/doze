@@ -9,14 +9,16 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-type Rule struct {
+// FIXME: this file should placed in its own module.
+
+type rule struct {
 	Procedure string   `yaml:"do"`
 	Inputs    []string `yaml:",flow"`
 	Outputs   []string `yaml:",flow"`
 }
 
-type Schema struct {
-	Rules []Rule `yaml:",omitempty"`
+type schema struct {
+	Rules []rule `yaml:",omitempty"`
 }
 
 // A Dozefile is a yaml file expressing a build graph.
@@ -27,7 +29,7 @@ func ParseDozefileYAML(dozefilePath string) (*doze.Graph, error) {
 		return nil, fmt.Errorf("parseDozefileYAML: %v", err)
 	}
 
-	var dozefileYAML Schema
+	var dozefileYAML schema
 	if err := yaml.Unmarshal(content, &dozefileYAML); err != nil {
 		return nil, fmt.Errorf("parseDozefileYAML: %v", err)
 	}

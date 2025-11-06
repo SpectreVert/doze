@@ -46,7 +46,7 @@ func (ObjectFile) Execute(rule *doze.Rule) error {
 			}
 			objectFile = output.Path()
 		} else {
-			return fmt.Errorf("found a non-c object file declared in rule %v", rule)
+			return fmt.Errorf("found a non object file declared in rule %v", rule)
 		}
 	}
 
@@ -97,7 +97,7 @@ func (Executable) Execute(rule *doze.Rule) error {
 
 	for _, input := range rule.Inputs {
 		if !strings.HasSuffix(input.Path(), ".o") {
-			return fmt.Errorf("found a non-c object fiel declared in rule %v", rule)
+			return fmt.Errorf("found a non object file declared in rule %v", rule)
 		}
 		inputs = append(inputs, input.Path())
 	}

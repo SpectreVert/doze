@@ -2,30 +2,32 @@ package doze
 
 import (
 	"container/list"
-	"crypto"
 	_ "crypto/md5"
 	"fmt"
 	"os"
 	"path"
 	"path/filepath"
-	"slices"
 	"strings"
 )
 
 // A Graph contains Rules and Artifacts of the current build.
 // The Rules and Artifacts are mapped using a Hash computed from their contents.
 type Graph struct {
-	rules     map[string]*Rule
-	artifacts map[string]*Artifact
+	rules      map[string]*Rule
+	artifacts  map[string]*Artifact
+	cachedHash string
 }
 
 // A Rule represents an action that processes input Artifacts into output Artifacts by executing a Procedure.
 // Inputs and Outputs contain only the Tags of the Artifacts.
-// Its Hash is computed by digesting the input and output Tags, as well as the Procedure ID.
+// Its Hash is computed by digesting the names of the input and output Artifacts (their ArtifactTag), as well as the ProcedureID.
+// Its Checksum is computed by digesting the contents of the input Artifacts.
 type Rule struct {
 	Inputs, Outputs []ArtifactTag
 	procID          ProcedureID
+	cachedHash      string
 
+	// TODO: REMOVE and replace with a local map of bools in Resolve
 	Scheduled bool
 }
 
@@ -36,7 +38,11 @@ type Artifact struct {
 	creator   *Rule   // The Rule which creates this Artifact. If nil, the Artifact is said to be 'primordial'.
 	consumers []*Rule // The Rule(s) which depend on this Artifact to be run.
 
-	Exists, Modified bool
+	// Exists: the artifact exists on disk.
+	// Built: the artifact was built by a Rule execution.
+	// Fetched: the artifact was fetched from the cache, not built by a Rule.
+	// TODO: REMOVE
+	Exists, Built, Fetched bool
 }
 
 // An ArtifactTag represents the path on disk to an Artifact.
@@ -46,6 +52,18 @@ type Artifact struct {
 type ArtifactTag struct {
 	name, location string
 }
+
+// The resolve mode is passed to Graph.Resolve to indicate which policy to apply when creating the plan.
+type ResolveMode int
+
+const (
+	// Terse: schedule nothing if all primordial rules are up-to-date.
+	TerseMode ResolveMode = iota
+	// Full: schedule all rules from the graph.
+	FullMode
+	// Target: schedule only rules that bring a specific artifact up-to-date. NOT IMPLEMENTED YET.
+	TargetMode
+)
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -58,71 +76,78 @@ func NewGraph() *Graph {
 	}
 }
 
-// Reset all Artifacts Modified and Exists flags.
-// For now, we assume that primordial Artifacts are never Modified...
+// Execute to completion a topologically sorted list of Rules (identified by their Hash),
+// with the goal of bringing the Graph up-to-date.
+// Executes synchronously and single-threadedly.
+// Returns the number of executed rules, fetched rules, and an error if one happened.
+func (graph *Graph) Execute(cache Cache) (int, int, error) {
+	var executedRules = 0
+	var fetchedRules = 0
+
+	for _, ruleHash := range cache.Plan() {
+		rule, ok := graph.rules[ruleHash]
+		if !ok {
+			return 0, 0, fmt.Errorf("rule [" + ruleHash + "] resolved for execution but doesn't exist")
+		}
+
+		if cache.HasArtifacts(graph.rules[ruleHash]) {
+			fmt.Println("rule [cached]:", ruleHash)
+			if err := cache.ProduceArtifacts(graph.rules[ruleHash]); err != nil {
+				// FIXME: add cleanup
+				return 0, 0, err
+			}
+			fetchedRules += 1
+		} else {
+			fmt.Println("rule:", ruleHash)
+			rule.Execute()
+
+			executedRules += 1
+
+			if err := cache.StoreArtifacts(graph.rules[ruleHash]); err != nil {
+				// FIXME: add cleanup
+				return 0, 0, err
+			}
+		}
+	}
+
+	if err := cache.FlushRecords(); err != nil {
+		return 0, 0, err
+	}
+
+	return executedRules, fetchedRules, nil
+}
+
+// Reset all Artifacts flags.
 func (graph *Graph) SetArtifactStates() {
 	for normalizedTag, artifact := range graph.artifacts {
 		_, err := os.Stat(normalizedTag)
 		artifact.Exists = (err == nil)
-		// We don't know yet if the Artifact was modified.
-		artifact.Modified = false
 	}
 }
 
-// Execute to completion a topologically sorted list of Rules (identified by their Hash), with the goal of bringing the Graph up-to-date.
-// Executes synchronously and single-threadedly.
-func (graph *Graph) Execute(plan []string) {
-	// Check if Artifacts exist and if they have been Modified.
+// Resolve computes a list of Rules for Graph, ordered topologically based on their dependencies and store it as the Graph's plan.
+//
+// NOTE: This always resolves fully. That is, whatever the state of each Rule's outputs. we will always return the entire graph
+// ordered topologically, and then have Resolve decide dynamically what to run... This is probably not what we want.
+//
+// What we could do instead, is:
+// -terse (default): only schedule the descendants of primordial rules which are not up-to-date.
+// -full: resolve all rules from the graph. Either run them to completion or use the cache.
+// -target: only schedule rules that contribute to building a specific artifact.
+
+// TODO: Use the cache. resolve should read the cache and execute should fetch/write to it.
+func (graph *Graph) Resolve(cache Cache) {
 	graph.SetArtifactStates()
 
-	var executedRules = 0
-	for _, ruleHash := range plan {
-		rule, ok := graph.rules[ruleHash]
-		if !ok {
-			panic("rule [" + ruleHash + "] resolved for execution but doesn't exist")
-		}
+	cache.ClearPlan()
 
-		var ruleIsOutdated = false
-		for _, inputTag := range rule.Inputs {
-			if graph.artifacts[inputTag.NormalizedTag()].Modified {
-				ruleIsOutdated = true
-				goto OutdatedRule
-			}
-		}
-		for _, outputTag := range rule.Outputs {
-			if !graph.artifacts[outputTag.NormalizedTag()].Exists {
-				ruleIsOutdated = true
-				goto OutdatedRule
-			}
-		}
-
-	OutdatedRule:
-		if ruleIsOutdated {
-			fmt.Println("rule:", ruleHash)
-			rule.Execute()
-			executedRules += 1
-
-			// Mark all output Artifacts as modified.
-			for _, outputTag := range rule.Outputs {
-				graph.artifacts[outputTag.NormalizedTag()].Modified = true
-			}
-		}
-	}
-
-	if executedRules == 0 {
-		fmt.Println("doze: Nothing to do.")
-	}
-}
-
-// Resolve computes a list of Rules for Graph, ordered topologically based on their dependencies.
-// This list is called the execution plan.
-func (graph *Graph) Resolve() []string {
 	// Computes the topological order of the Graph. (Kahn's Algorithm)
-	// The hard thing to grasp is that a Rule makes up both nodes and edges.
+	// The peculiar thing is that a Rule makes up both nodes and edges.
 	// Essentially, a node is a group of input or output Artifacts. An edge is the Rule that transforms them.
 
-	// Make an initial list of Rules whose input Artifacts do not have a creator Rule. These are called primordial Rules.
-	// We add them to the list of Rules to inspect next for scheduling.
+	// Make an initial list of Rules whose input Artifacts do not have a creator Rule.
+	// Also check if the rules were executed in the last run.
+	// These are called primordial Rules.
 	var rulesToInspect = list.New()
 RulesToInspectLoop:
 	for hash, rule := range graph.rules {
@@ -130,16 +155,44 @@ RulesToInspectLoop:
 			if graph.artifacts[tag.NormalizedTag()].creator != nil {
 				continue RulesToInspectLoop
 			}
+			// TODO: check that this exists.
+			// The function should maybe return errors.
 		}
-		rulesToInspect.PushBack(hash)
+
+		if !cache.RuleInLastRun(rule) /* OR IF FULL MODE */ {
+			graph.rules[hash].Scheduled = true
+			rulesToInspect.PushBack(hash)
+		}
+		cache.RecordRule(rule)
+
+		// GET TIMESTAMP
+		// FOREACH RULE:
+		//	IF RULE IS IN CACHE:
+		//		DO NOT SCHEDULE
+		//	ELSE RULE NOT IN CACHE:
+		//		# the rule is new
+		//		QUEUE ADDING THE RULE IN CACHE, WITH HASH, CHECKSUM
+		//		SCHEDULE RULE
+		//	QUEUE RECORD RULE IN CACHE
+		//
+		//  UPDATE ALL QUEUED RULES IN CACHE
+		//
+		// FOREACH RULE IN CACHE:
+		//	IF TIMESTAMP NOT UPTODATE:
+		//		DELETE RULE
+
 	}
 
-	var plan []string
+	// IF TERSE MODE:
+	//		ONLY UPDATE RULES THAT CHANGED INPUTS
+	//		OR IF ALL RULES CHANGED GOTO FULL MODE
+	// IF FULL MODE:
+	//		CLEAR THE PIMORDIAL CACHE
+
 	// While rulesToInspect is not empty
 	for e := rulesToInspect.Front(); e != nil; e = rulesToInspect.Front() {
 		ruleHash := rulesToInspect.Remove(e).(string)
-		graph.rules[ruleHash].Scheduled = true
-		plan = append(plan, ruleHash)
+		cache.ScheduleRule(graph.rules[ruleHash])
 
 		// Iterate over each output Artifact of Rule `ruleHash` to inspect Rules which depend on them.
 		for _, outputTag := range graph.rules[ruleHash].Outputs {
@@ -149,11 +202,13 @@ RulesToInspectLoop:
 			// creator Rule is already scheduled (and in the plan). In that case, the `consumerRule` can be scheduled and added to the plan.
 			for _, consumerRule := range graph.artifacts[outputTag.NormalizedTag()].consumers {
 				for _, consumerTag := range consumerRule.Inputs {
-					if graph.artifacts[consumerTag.NormalizedTag()].creator != nil && !graph.artifacts[consumerTag.NormalizedTag()].creator.Scheduled {
+					if graph.artifacts[consumerTag.NormalizedTag()].Exists || consumerTag == outputTag {
+						continue
+					} else if graph.artifacts[consumerTag.NormalizedTag()].creator != nil && !graph.artifacts[consumerTag.NormalizedTag()].creator.Scheduled {
 						continue CheckConsumerRules
 					}
 				}
-				// It's also possible that this Rule was already scheduled during the same iterator over `consumers` Rule of `outputTag`.
+				// It's also possible that this Rule was already scheduled as a creator rule, or during a previous iteration over consumer rules.
 				if !graph.rules[consumerRule.Hash()].Scheduled {
 					graph.rules[consumerRule.Hash()].Scheduled = true
 					rulesToInspect.PushBack(consumerRule.Hash())
@@ -161,8 +216,6 @@ RulesToInspectLoop:
 			}
 		}
 	}
-
-	return plan
 }
 
 // AddRule registers a new Rule with the Graph.
@@ -260,24 +313,6 @@ func (rule *Rule) Execute() {
 		fmt.Println("rule.Execute:", err)
 		os.Exit(2)
 	}
-}
-
-// The Hash function of a Rule. Obviously, must be deterministic.
-// Takes into account the input and output ArtifactTags, and the ProcedureID.
-func (rule *Rule) Hash() string {
-	hash := crypto.MD5.New()
-
-	slices.SortFunc(rule.Inputs, CompareArtifactTags)
-	for _, inputTag := range rule.Inputs {
-		hash.Write([]byte(inputTag.NormalizedTag()))
-	}
-	slices.SortFunc(rule.Outputs, CompareArtifactTags)
-	for _, outputTag := range rule.Outputs {
-		hash.Write([]byte(outputTag.NormalizedTag()))
-	}
-	hash.Write([]byte(rule.procID))
-
-	return fmt.Sprintf("%x", hash.Sum(nil))
 }
 
 /* ArtifactTag */

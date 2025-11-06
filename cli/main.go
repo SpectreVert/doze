@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spectrevert/doze"
 	"github.com/spectrevert/doze/dozefile"
 
 	// Plug in Doze procedures under this comment.
@@ -19,6 +20,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	var plan = graph.Resolve()
-	graph.Execute(plan)
+	cache := doze.NewLocalCache()
+
+	graph.Resolve(cache)
+	if _, _, err := graph.Execute(cache); err != nil {
+		fmt.Println("execute: %s", err)
+	}
 }
