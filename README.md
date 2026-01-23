@@ -1,3 +1,5 @@
+![The doze logo](./images/doze.jpg)
+
 # Doze
 
 A modulable and minimalist file-processing system.
