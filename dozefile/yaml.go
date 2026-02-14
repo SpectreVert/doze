@@ -1,4 +1,4 @@
-package yaml
+package dozefile
 
 import (
 	"fmt"
@@ -9,6 +9,8 @@ import (
 	"github.com/spectrevert/doze"
 )
 
+// An implementation of Dozefile targetting YAML configuration files.
+
 type schema struct {
 	Rules []struct {
 		Inputs  []string `yaml:",flow"`
@@ -16,11 +18,12 @@ type schema struct {
 		ProcID  string   `yaml:"do"`
 		InDir   string   `yaml:"in"`
 		OutDir  string   `yaml:"out"`
-	} `yaml:",omitempty,inline"`
+	} `yaml:",omitempty"`
 }
 
-func Parse(path string) (*doze.Graph, error) {
-	if content, err := ioutil.ReadFile(path); err != nil {
+func ParseYAML(path string) (*doze.Graph, error) {
+	content, err := ioutil.ReadFile(path)
+	if err != nil {
 		return nil, fmt.Errorf("(%v): %v", path, err)
 	}
 
@@ -37,7 +40,7 @@ func Parse(path string) (*doze.Graph, error) {
 		if _, err := doze.GetProcedure(doze.ProcedureID(rule.ProcID)); err != nil {
 			return nil, fmt.Errorf("(%v): %v", path, err)
 		}
-		if err = doze.NewRule(g, rule.Inputs, rule.Outputs, doze.ProcedureID(rule.ProcID), rule.InDir, rule.OutDir); err != nil {
+		if err = doze.NewRule(g, rule.Inputs, rule.Outputs, rule.InDir, rule.OutDir, doze.ProcedureID(rule.ProcID)); err != nil {
 			return nil, fmt.Errorf("(%v): %v", path, err)
 		}
 	}

@@ -1,6 +1,9 @@
 package doze
 
-import "strings"
+import (
+	"os"
+	"strings"
+)
 
 type Artifact struct {
 	creator   *Rule
@@ -11,6 +14,15 @@ type Artifact struct {
 
 type ArtifactTag string
 
-func CompareArtifactTags(ArtifactTag first, ArtifactTag second) int {
-	return strings.Compare(first, second)
+func (tag ArtifactTag) String() string {
+	return string(tag)
+}
+
+func (tag ArtifactTag) Exists() bool {
+	_, err := os.Stat(string(tag))
+	return (err == nil)
+}
+
+func CompareArtifactTags(first, second ArtifactTag) int {
+	return strings.Compare(string(first), string(second))
 }

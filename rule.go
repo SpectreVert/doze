@@ -5,10 +5,14 @@ import (
 	_ "crypto/md5"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 )
 
+// A Rule transforms input files into output files, using a Procedure.
+// The checksum takes the input tags, output tags and procID into consideration
+// and is used as a key to the Rule struct in the internal Doze context.
 type Rule struct {
 	Inputs, Outputs []ArtifactTag
 	procID          ProcedureID
@@ -42,10 +46,10 @@ func NewRule(
 		_, ok := graph.artifacts[tag]
 		if !ok {
 			graph.artifacts[tag] = &Artifact{
-				tag: tag,
+				tag: ArtifactTag(tag),
 			}
 		}
-		rule.Inputs = append(rule.Inputs, tag)
+		rule.Inputs = append(rule.Inputs, ArtifactTag(tag))
 		graph.artifacts[tag].consumers = append(graph.artifacts[tag].consumers, rule)
 	}
 
@@ -54,15 +58,16 @@ func NewRule(
 		artifact, ok := graph.artifacts[tag]
 		if !ok {
 			graph.artifacts[tag] = &Artifact{
-				tag:     tag,
+				tag:     ArtifactTag(tag),
 				creator: rule,
 			}
 		} else if artifact.creator != nil {
-			return fmt.Errorf("artifact (%v) was registered as an output twice", tag) // TODO: format the error message better e.g (<tag-name>)[artifact-checksum]
+			// @todo format the error message better e.g (<tag-name>)[artifact-checksum]
+			return fmt.Errorf("artifact (%v) was registered as an output twice", tag)
 		} else {
 			artifact.creator = rule
 		}
-		rule.Outputs = append(rule.Outputs, tag)
+		rule.Outputs = append(rule.Outputs, ArtifactTag(tag))
 	}
 
 	checksum := rule.Checksum()
@@ -75,6 +80,9 @@ func NewRule(
 	return nil
 }
 
+// The checksum of a Rule is the deterministic checksum built from a Rule's input tags, output tags and procID.
+// The checksum is cached directly in the Rule structure.
+// Caching of the Rule checksum is possible because its fields are constants.
 func (rule *Rule) Checksum() string {
 	if rule.checksum != "" {
 		return rule.checksum
@@ -91,15 +99,31 @@ func (rule *Rule) Checksum() string {
 	}
 	checksum.Write([]byte(rule.procID))
 
-	rule.checksum = hex.EncodeToString(hash.Sum(nil))
+	rule.checksum = hex.EncodeToString(checksum.Sum(nil))
 	return rule.checksum
 }
 
+// The source checksum of a Rule is the deterministic checksum of the content of all the Rule's inputs.
+// It is used to decide if a Rule is outdated. It cannot be cached.
+func (rule *Rule) SourceChecksum() string {
+	sourceChecksum := crypto.MD5.New()
+	for _, tag := range rule.Inputs {
+		content, err := os.ReadFile(string(tag))
+		if err != nil {
+			panic(fmt.Sprintf("could not open artifact (%s) for reading: %s", tag, err))
+		}
+		sourceChecksum.Write(content)
+	}
+	return hex.EncodeToString(sourceChecksum.Sum(nil))
+}
+
 func (rule *Rule) Execute() error {
-	if procInfo, err := GetProcedure(rule.procID); err != nil {
+	procInfo, err := GetProcedure(rule.procID)
+	if err != nil {
 		return err
 	}
 
+	fmt.Printf("  %s: %v -> %v\n", rule.procID, rule.Inputs, rule.Outputs)
 	proc := procInfo.New()
 	if err = proc.Execute(rule); err != nil {
 		return err

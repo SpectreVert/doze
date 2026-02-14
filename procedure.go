@@ -6,12 +6,26 @@ import (
 )
 
 // A Procedure is a type used as a Doze processing function.
+// It must implement Execute(*Rule) to be able to be called by Doze to process rules.
 type Procedure interface {
 	GetProcedureInfo() ProcedureInfo
 	Execute(*Rule) error
 }
 
-// A ProcedureInfo represents a Procedure registered with Doze.
+// A Procedure can optionally implement the Provisioner type.
+// - Loading guest procedures (procedures should be able to chain themselves right?)
+// - Setting up internal values that will be used during the procedure's lifetime.
+type Provisioner interface {
+	Provision() error
+}
+
+// A Procedure can optionally implement the Decommissioner type.
+// If a procedure allocated resources that should be freed, it can do so in the decommission phase.
+type Decommissioner interface {
+	Decommission() error
+}
+
+// A ProcedureInfo represents a Procedure that can be registered with Doze.
 type ProcedureInfo struct {
 	ID  ProcedureID
 	New func() Procedure
