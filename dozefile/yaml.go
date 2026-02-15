@@ -12,6 +12,7 @@ import (
 // An implementation of Dozefile targetting YAML configuration files.
 
 type schema struct {
+	Vars  doze.Vars `yaml:",omitempty"`
 	Rules []struct {
 		Inputs  []string `yaml:",flow"`
 		Outputs []string `yaml:",flow"`
@@ -27,20 +28,20 @@ func ParseYAML(path string) (*doze.Graph, error) {
 		return nil, fmt.Errorf("(%v): %v", path, err)
 	}
 
-	var df schema
-	if err = yaml.Unmarshal(content, &df); err != nil {
+	var dozefile schema
+	if err = yaml.Unmarshal(content, &dozefile); err != nil {
 		return nil, fmt.Errorf("(%v): %v", path, err)
 	}
-	if df.Rules == nil {
+	if dozefile.Rules == nil {
 		return nil, fmt.Errorf("(%v): must contain at least one rule", path)
 	}
 
 	g := doze.NewGraph()
-	for _, rule := range df.Rules {
+	for _, rule := range dozefile.Rules {
 		if _, err := doze.GetProcedure(doze.ProcedureID(rule.ProcID)); err != nil {
 			return nil, fmt.Errorf("(%v): %v", path, err)
 		}
-		if err = doze.NewRule(g, rule.Inputs, rule.Outputs, rule.InDir, rule.OutDir, doze.ProcedureID(rule.ProcID)); err != nil {
+		if err = doze.NewRule(g, rule.Inputs, rule.Outputs, rule.InDir, rule.OutDir, doze.ProcedureID(rule.ProcID), dozefile.Vars); err != nil {
 			return nil, fmt.Errorf("(%v): %v", path, err)
 		}
 	}

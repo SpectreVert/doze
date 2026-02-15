@@ -25,6 +25,7 @@ func NewRule(
 	inputs, outputs []string,
 	inputDir, outputDir string,
 	procID ProcedureID,
+	vars Vars,
 ) error {
 	if len(inputs) == 0 {
 		return fmt.Errorf("no inputs provided")
@@ -38,6 +39,20 @@ func NewRule(
 
 	rule := &Rule{
 		procID: procID,
+	}
+
+	// Interpolate variables into input and output tags, input and output dirs.
+	if err := Interpolate(&inputs, &vars); err != nil {
+		return err
+	}
+	if err := Interpolate(&outputs, &vars); err != nil {
+		return err
+	}
+	if err := Interpolate(&inputDir, &vars); err != nil {
+		return err
+	}
+	if err := Interpolate(&outputDir, &vars); err != nil {
+		return err
 	}
 
 	// For passed input and output tags, fetch or create an Artifact and fill its Rule field.
