@@ -28,14 +28,15 @@ func Resolve(graph *Graph, cache Cache, mode ResolveMode) (int, error) {
 
 	// Computes the topological order of the Graph. (Kahn's Algorithm)
 
-	// Make an initial list of Rules whose input Artifacts do not have a creator Rule (primordial Artifacts).
-	// While making the list, check if these rules (primordial Rules) were run last time or if they need to be scheduled.
 	var rulesToInspect = list.New() // This list gets modified in-place to iterate over the Rules to inspect.
 	var scheduledRules []string     // Because the above list gets modified, we need to keep track of which Rules were inspected or scheduled for inspection already.
 RulesToInspectLoop:
+	// Make an initial list of Rules whose input Artifacts do not have a creator Rule (primordial Artifacts).
+	// While making the list, check if these rules (primordial Rules) were run last time or if they need to be scheduled.
 	for checksum, rule := range graph.rules {
 		for _, tag := range rule.Inputs {
 			if graph.artifacts[string(tag)].creator != nil {
+				// We can't schedule that Rule because it has a creator rule. We will eventually reach it and schedule it normally (when it is ready).
 				continue RulesToInspectLoop
 			}
 			// NOTE: here we could still check if the input Artifact exists on disk.
@@ -125,6 +126,6 @@ const (
 	TerseMode ResolveMode = iota
 
 	// FullMode schedules all the Rules scheduled by TerseMode, with the addition of Rules that are missing at least an output in the build directory.
-	// Useful when some files have been deleted manually outside of Doze execution.
+	// Useful when some files have been deleted manually outside of Doze execution, or if you changed Dozefile.yml since the last run.
 	FullMode
 )
