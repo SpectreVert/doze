@@ -99,6 +99,7 @@ func (Exe) Execute(rule *doze.Rule) error {
 
 	C.tcc_set_output_type(tccState, C.TCC_OUTPUT_EXE)
 
+	gotSourceOrObjectFile := false
 	for _, tag := range rule.Inputs {
 		switch filepath.Ext(string(tag)) {
 		case ".h":
@@ -106,13 +107,18 @@ func (Exe) Execute(rule *doze.Rule) error {
 			if C.tcc_add_file(tccState, C.CString(string(tag))) == -1 {
 				return fmt.Errorf("failed to compile C source file %s", string(tag))
 			}
+			gotSourceOrObjectFile = true
 		case ".o":
 			if C.tcc_add_file(tccState, C.CString(string(tag))) == -1 {
 				return fmt.Errorf("failed to link object file %s", string(tag))
 			}
+			gotSourceOrObjectFile = true
 		default:
 			return fmt.Errorf("input can only be C source, header or object file (.c .h or .o), got %s", string(tag))
 		}
+	}
+	if !gotSourceOrObjectFile {
+		return fmt.Errorf("expected at least one C source file or object file (.c or .o), got none")
 	}
 
 	if C.tcc_output_file(tccState, C.CString(string(exe))) == -1 {
