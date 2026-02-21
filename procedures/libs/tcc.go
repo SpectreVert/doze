@@ -44,7 +44,6 @@ func (Obj) Execute(rule *doze.Rule) error {
 	}
 	obj := rule.Outputs[0]
 
-	// TODO: when Provision is implemented, move that there. Or can we?
 	tccState := C.tcc_new()
 	defer C.tcc_delete(tccState)
 
@@ -93,7 +92,6 @@ func (Exe) Execute(rule *doze.Rule) error {
 	}
 	exe := rule.Outputs[0]
 
-	// TODO: ditto as above. Move that into provision?
 	tccState := C.tcc_new()
 	defer C.tcc_delete(tccState)
 
